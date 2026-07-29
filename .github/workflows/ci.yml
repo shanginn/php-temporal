@@ -23,7 +23,7 @@ jobs:
       - name: Resolve TrueAsync php-src + php-async revisions
         id: phpsrc
         run: |
-          echo "sha=$(git ls-remote https://github.com/true-async/php-src refs/heads/true-async | cut -f1)" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git ls-remote https://github.com/true-async/php-src refs/heads/true-async-stable | cut -f1)" >> "$GITHUB_OUTPUT"
           echo "asha=$(git ls-remote https://github.com/true-async/php-async refs/heads/main | cut -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Cache TrueAsync PHP
@@ -38,7 +38,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y bison re2c libuv1-dev libssl-dev zlib1g-dev libonig-dev
-          git clone --depth 1 --branch true-async https://github.com/true-async/php-src /tmp/php-src
+          git clone --depth 1 --branch true-async-stable https://github.com/true-async/php-src /tmp/php-src
           # ext/async lives in its own repo, nested into the php-src tree;
           # without it buildconf does not even know --enable-async.
           git clone --depth 1 https://github.com/true-async/php-async /tmp/php-src/ext/async
