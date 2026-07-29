@@ -111,7 +111,7 @@ jobs:
       - name: Check out the SDK fork
         uses: actions/checkout@v4
         with:
-          repository: true-async/sdk-php
+          repository: shanginn/sdk-php
           ref: true-async
           path: sdk-php
 

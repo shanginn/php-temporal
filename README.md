@@ -21,7 +21,7 @@ synchronous while the coroutine yields underneath.
 
 The **high-level client API is the reused official Temporal PHP SDK** (the
 `Temporal\*` namespace), driven through a `ServiceClientInterface` adapter over
-this transport — see the [`true-async/sdk-php`](https://github.com/true-async/sdk-php)
+this transport — see the [`shanginn/sdk-php`](https://github.com/shanginn/sdk-php)
 fork (branch `true-async`), which strips gRPC/RoadRunner from the dependencies.
 
 A client starting a workflow — **written flat**: the first Core call launches the
@@ -238,7 +238,7 @@ SDK's client layer on top, in-process on the TrueAsync reactor.
 
 - PHP 8.x built with **ZTS** and the **TrueAsync** runtime.
 - A Rust toolchain (`cargo`) to build the vendored `sdk-core-c-bridge`.
-- The reused SDK package (`true-async/sdk-php`, branch `true-async`), which pulls
+- The reused SDK package (`shanginn/sdk-php`, branch `true-async`), which pulls
   `google/protobuf` and the bundled Temporal protobuf messages.
 
 ## Build
