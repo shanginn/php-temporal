@@ -23,11 +23,20 @@ if test "$PHP_TEMPORAL" != "no"; then
   TEMPORAL_CORE_LIBDIR="$TEMPORAL_CORE_DIR/target/release"
 
   dnl The Rust core C bridge (cdylib) is built ahead of time with cargo; we
-  dnl link against the prebuilt shared object (see docs/installation.md):
+  dnl link against the prebuilt shared library (see docs/installation.md):
   dnl   cargo build --release -p temporalio-sdk-core-c-bridge \
   dnl     --manifest-path third_party/sdk-rust/Cargo.toml
+  case "$host_os" in
+    darwin*)
+      TEMPORAL_CORE_LIBRARY="$TEMPORAL_CORE_LIBDIR/libtemporalio_sdk_core_c_bridge.dylib"
+      ;;
+    *)
+      TEMPORAL_CORE_LIBRARY="$TEMPORAL_CORE_LIBDIR/libtemporalio_sdk_core_c_bridge.so"
+      ;;
+  esac
+
   AC_MSG_CHECKING([for the prebuilt Temporal core c-bridge library])
-  if test ! -f "$TEMPORAL_CORE_LIBDIR/libtemporalio_sdk_core_c_bridge.so"; then
+  if test ! -f "$TEMPORAL_CORE_LIBRARY"; then
     AC_MSG_ERROR([Temporal core c-bridge is not built. Build it first:
   cargo build --release -p temporalio-sdk-core-c-bridge \
     --manifest-path third_party/sdk-rust/Cargo.toml])
@@ -36,11 +45,10 @@ if test "$PHP_TEMPORAL" != "no"; then
 
   PHP_ADD_INCLUDE([$TEMPORAL_CORE_INCLUDE])
 
-  dnl Link the cdylib and bake an rpath so the loader finds it from the cargo
-  dnl target dir (dev build; packaging can install it system-wide later).
+  dnl Link the cdylib from the cargo target dir. PHP_ADD_LIBRARY_WITH_PATH also
+  dnl supplies the development rpath; packaging can install it system-wide later.
   PHP_ADD_LIBRARY_WITH_PATH([temporalio_sdk_core_c_bridge],
     [$TEMPORAL_CORE_LIBDIR], [TEMPORAL_SHARED_LIBADD])
-  TEMPORAL_SHARED_LIBADD="$TEMPORAL_SHARED_LIBADD -Wl,-rpath,$TEMPORAL_CORE_LIBDIR"
 
   PHP_SUBST([TEMPORAL_SHARED_LIBADD])
 

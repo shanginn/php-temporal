@@ -14,10 +14,10 @@ transport through a `ServiceClientInterface` adapter — see the
 ### Added
 - Links the official Temporal Rust core (`sdk-core-c-bridge`), vendored as a
   submodule under `third_party/sdk-rust`. Points at our fork
-  (`true-async/sdk-rust`, branch `true-async`): v0.4.0 plus one fix to the
-  c-bridge worker shutdown (see Fixed), submitted upstream. The bridge header is
-  isolated in a Zend-free shim (`temporal_core.c`) to avoid symbol clashes with
-  `php.h`.
+  (`true-async/sdk-rust`, branch `true-async`), currently based on post-v0.5.0
+  upstream Core. The c-bridge worker shutdown fix originally carried by the fork
+  is now included upstream (see Fixed). The bridge header is isolated in a
+  Zend-free shim (`temporal_core.c`).
 - A process-wide core runtime (Tokio), created in MINIT.
 - `TrueAsync\Temporal\Core\Connection` — the transport: `connect` plus an async
   `rpcCall(service, method, requestBytes): responseBytes`. Each call parks the
@@ -59,9 +59,10 @@ transport through a `ServiceClientInterface` adapter — see the
   expected 1 reference, got 2" under load. The upstream c-bridge dropped each
   poll/complete task's worker `Arc` clone only after waking the lang thread, so a
   finalize racing that wake saw a transient extra owner and `Arc::try_unwrap`
-  failed (spending the worker beyond retry). Our core fork drops the clone before
-  the callback (notify-after-release), so finalize deterministically sees sole
-  ownership. Submitted upstream.
+  failed (spending the worker beyond retry). The bridge now drops the clone
+  before the callback (notify-after-release), so finalize deterministically sees
+  sole ownership. This fork's original fix was accepted upstream in
+  `temporalio/sdk-rust#1365`.
 - `rpcCall` metadata keys/values embedding a newline are rejected with a
   `ValueError` instead of corrupting the core's `key\nvalue` wire form; a
   negative timeout is rejected instead of being silently cast to a huge uint32.

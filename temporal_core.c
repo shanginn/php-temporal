@@ -362,17 +362,17 @@ void *temporal_php_worker_new(void *connection, const char *ns, const char *task
 	opt.task_queue = temporal_php_ref(task_queue);
 
 	/* No versioning. */
-	opt.versioning_strategy.tag = None;
+	opt.versioning_strategy.tag = TemporalCoreWorkerVersioningStrategy_None;
 	opt.versioning_strategy.none.build_id = temporal_php_ref("");
 
 	/* Fixed-size slot suppliers. All four must be valid. */
-	opt.tuner.activity_slot_supplier.tag = FixedSize;
+	opt.tuner.activity_slot_supplier.tag = TemporalCoreSlotSupplier_FixedSize;
 	opt.tuner.activity_slot_supplier.fixed_size.num_slots = options->activity_slots;
-	opt.tuner.workflow_slot_supplier.tag = FixedSize;
+	opt.tuner.workflow_slot_supplier.tag = TemporalCoreSlotSupplier_FixedSize;
 	opt.tuner.workflow_slot_supplier.fixed_size.num_slots = options->workflow_slots;
-	opt.tuner.local_activity_slot_supplier.tag = FixedSize;
+	opt.tuner.local_activity_slot_supplier.tag = TemporalCoreSlotSupplier_FixedSize;
 	opt.tuner.local_activity_slot_supplier.fixed_size.num_slots = options->local_activity_slots;
-	opt.tuner.nexus_task_slot_supplier.tag = FixedSize;
+	opt.tuner.nexus_task_slot_supplier.tag = TemporalCoreSlotSupplier_FixedSize;
 	opt.tuner.nexus_task_slot_supplier.fixed_size.num_slots = options->nexus_slots;
 
 	/* Handle workflow, activity and local-activity tasks (a Temporal worker does
@@ -382,6 +382,7 @@ void *temporal_php_worker_new(void *connection, const char *ns, const char *task
 	opt.task_types.enable_workflows = true;
 	opt.task_types.enable_remote_activities = true;
 	opt.task_types.enable_local_activities = true;
+	opt.task_types.enable_nexus = false;
 
 	/* Sticky execution: keep workflow runs cached between tasks so a fired timer
 	 * or resolved activity resumes the live instance instead of replaying from

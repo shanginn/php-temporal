@@ -74,7 +74,7 @@ PHP_MINFO_FUNCTION(temporal)
 	php_info_print_table_start();
 	php_info_print_table_row(2, "Temporal support", "enabled");
 	php_info_print_table_row(2, "Extension version", PHP_TEMPORAL_VERSION);
-	php_info_print_table_row(2, "Core c-bridge", "temporalio-sdk-core-c-bridge v0.4.0");
+	php_info_print_table_row(2, "Core c-bridge", "temporalio-sdk-core-c-bridge v0.5.0+");
 	php_info_print_table_end();
 }
 

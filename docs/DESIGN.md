@@ -265,12 +265,15 @@ direction, not the current design.
 
 * `sdk-core-c-bridge` is built **separately, ahead of `configure`**, with
   `cargo build --release` as a `cdylib`; vendored as a git submodule under
-  `third_party/sdk-rust` — our fork `true-async/sdk-rust` (v0.4.0 + a worker-
-  shutdown fix, see CHANGELOG), pending upstream `temporalio/sdk-rust#1330`.
+  `third_party/sdk-rust` — our fork `true-async/sdk-rust`, currently based on
+  post-v0.5.0 upstream Core. Its original worker-shutdown fix is included
+  upstream as `temporalio/sdk-rust#1365`.
 * `config.m4` does **not** build the bridge: it locates the prebuilt
-  `libtemporalio_sdk_core_c_bridge.so` (erroring with the exact cargo command if
-  it is missing), adds the C header include dir, and links the extension against
-  it with an rpath to the cargo target dir. ZTS required (TrueAsync).
+  `libtemporalio_sdk_core_c_bridge.so` on ELF platforms or
+  `libtemporalio_sdk_core_c_bridge.dylib` on macOS (erroring with the exact cargo
+  command if it is missing), adds the C header include dir, and links the
+  extension against it with an rpath to the cargo target dir. ZTS required
+  (TrueAsync).
 * `google/protobuf` PHP runtime for the generated message classes.
 
 ## 9. Open questions for review
