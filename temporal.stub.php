@@ -87,6 +87,27 @@ final class Worker
     public function __construct(Connection $connection, string $taskQueue, string $namespace = 'default', int $maxConcurrentActivities = 100, array $options = []) {}
 
     /**
+     * Create an offline replay worker backed by Temporal Core. It needs no
+     * server connection: feed one or more serialized
+     * temporal.api.history.v1.History messages with pushReplayHistory(), close
+     * the stream, then drive pollWorkflowActivation() /
+     * completeWorkflowActivation() until the poll returns null.
+     */
+    public static function createReplay(string $taskQueue = 'replay', string $namespace = 'default', array $options = []): Worker {}
+
+    /**
+     * Queue one serialized temporal.api.history.v1.History for replay.
+     * Histories do not carry their workflow ID, so it is supplied separately.
+     */
+    public function pushReplayHistory(string $workflowId, string $history): void {}
+
+    /**
+     * Close the replay input stream. Idempotent. Core auto-shuts down after all
+     * queued histories finish replaying.
+     */
+    public function closeReplayHistory(): void {}
+
+    /**
      * Poll for the next activity task. Parks the coroutine until a task is
      * ready; returns the serialized coresdk ActivityTask, or null once the
      * worker has shut down.

@@ -147,6 +147,8 @@ static zend_object *temporal_worker_create_object(zend_class_entry *ce)
 	obj->std.handlers = &temporal_worker_handlers;
 	obj->worker = NULL;
 	obj->connection = NULL;
+	obj->replay_pusher = NULL;
+	obj->replay = false;
 	obj->finalized = false;
 
 	return &obj->std;
@@ -156,6 +158,10 @@ static void temporal_worker_free_object(zend_object *object)
 {
 	temporal_worker_obj *obj = temporal_worker_from_obj(object);
 
+	if (obj->replay_pusher != NULL) {
+		temporal_php_replay_pusher_free(obj->replay_pusher);
+		obj->replay_pusher = NULL;
+	}
 	if (obj->worker != NULL) {
 		temporal_php_handle_release((temporal_php_handle_t *) obj->worker);
 		obj->worker = NULL;
@@ -829,6 +835,64 @@ static bool temporal_worker_option(HashTable *options, const char *key,
 	return true;
 }
 
+static bool temporal_worker_options_parse(zend_long max_activities, HashTable *options,
+                                          temporal_php_worker_options_t *opts)
+{
+	if (max_activities < 1 || max_activities > UINT32_MAX) {
+		zend_value_error("maxConcurrentActivities must be a positive 32-bit integer");
+		return false;
+	}
+
+	*opts = (temporal_php_worker_options_t) {
+		.activity_slots = (uint32_t) max_activities,
+		.workflow_slots = 100,
+		.local_activity_slots = 100,
+		.nexus_slots = 100,
+		.max_cached_workflows = 1000,
+		.sticky_schedule_to_start_ms = 10000,
+		.graceful_shutdown_ms = 0,
+		.activity_pollers = 5,
+		.workflow_pollers = 2,
+		.nexus_pollers = 1,
+	};
+
+	if (options == NULL) {
+		return true;
+	}
+
+	uint64_t v;
+
+#define TPHP_WORKER_OPT32(key, min, field) do { \
+	v = opts->field; \
+	if (!temporal_worker_option(options, key, min, (zend_long) UINT32_MAX, &v)) { \
+		return false; \
+	} \
+	opts->field = (uint32_t) v; \
+} while (0)
+#define TPHP_WORKER_OPT64(key, min, field) do { \
+	v = opts->field; \
+	if (!temporal_worker_option(options, key, min, ZEND_LONG_MAX, &v)) { \
+		return false; \
+	} \
+	opts->field = v; \
+} while (0)
+
+	TPHP_WORKER_OPT32("workflowSlots",       1, workflow_slots);
+	TPHP_WORKER_OPT32("localActivitySlots",  1, local_activity_slots);
+	TPHP_WORKER_OPT32("nexusSlots",          1, nexus_slots);
+	TPHP_WORKER_OPT32("maxCachedWorkflows",  0, max_cached_workflows);
+	TPHP_WORKER_OPT64("stickyScheduleToStartTimeoutMs", 1, sticky_schedule_to_start_ms);
+	TPHP_WORKER_OPT64("gracefulShutdownMs",  0, graceful_shutdown_ms);
+	TPHP_WORKER_OPT32("activityPollers",      1, activity_pollers);
+	TPHP_WORKER_OPT32("workflowPollers",      1, workflow_pollers);
+	TPHP_WORKER_OPT32("nexusPollers",         1, nexus_pollers);
+
+#undef TPHP_WORKER_OPT32
+#undef TPHP_WORKER_OPT64
+
+	return true;
+}
+
 PHP_METHOD(TrueAsync_Temporal_Core_Worker, __construct)
 {
 	zval *connection_zv;
@@ -852,54 +916,9 @@ PHP_METHOD(TrueAsync_Temporal_Core_Worker, __construct)
 		RETURN_THROWS();
 	}
 
-	if (max_activities < 1 || max_activities > UINT32_MAX) {
-		zend_value_error("maxConcurrentActivities must be a positive 32-bit integer");
+	temporal_php_worker_options_t opts;
+	if (!temporal_worker_options_parse(max_activities, options, &opts)) {
 		RETURN_THROWS();
-	}
-
-	temporal_php_worker_options_t opts = {
-		.activity_slots = (uint32_t) max_activities,
-		.workflow_slots = 100,
-		.local_activity_slots = 100,
-		.nexus_slots = 100,
-		.max_cached_workflows = 1000,
-		.sticky_schedule_to_start_ms = 10000,
-		.graceful_shutdown_ms = 0,
-		.activity_pollers = 5,
-		.workflow_pollers = 2,
-		.nexus_pollers = 1,
-	};
-
-	if (options != NULL) {
-		uint64_t v;
-
-#define TPHP_WORKER_OPT32(key, min, field) do { \
-		v = opts.field; \
-		if (!temporal_worker_option(options, key, min, (zend_long) UINT32_MAX, &v)) { \
-			RETURN_THROWS(); \
-		} \
-		opts.field = (uint32_t) v; \
-	} while (0)
-#define TPHP_WORKER_OPT64(key, min, field) do { \
-		v = opts.field; \
-		if (!temporal_worker_option(options, key, min, ZEND_LONG_MAX, &v)) { \
-			RETURN_THROWS(); \
-		} \
-		opts.field = v; \
-	} while (0)
-
-		TPHP_WORKER_OPT32("workflowSlots",      1, workflow_slots);
-		TPHP_WORKER_OPT32("localActivitySlots", 1, local_activity_slots);
-		TPHP_WORKER_OPT32("nexusSlots",         1, nexus_slots);
-		TPHP_WORKER_OPT32("maxCachedWorkflows", 0, max_cached_workflows);
-		TPHP_WORKER_OPT64("stickyScheduleToStartTimeoutMs", 1, sticky_schedule_to_start_ms);
-		TPHP_WORKER_OPT64("gracefulShutdownMs", 0, graceful_shutdown_ms);
-		TPHP_WORKER_OPT32("activityPollers",    1, activity_pollers);
-		TPHP_WORKER_OPT32("workflowPollers",    1, workflow_pollers);
-		TPHP_WORKER_OPT32("nexusPollers",       1, nexus_pollers);
-
-#undef TPHP_WORKER_OPT32
-#undef TPHP_WORKER_OPT64
 	}
 
 	char *err = NULL;
@@ -923,6 +942,104 @@ PHP_METHOD(TrueAsync_Temporal_Core_Worker, __construct)
 	}
 	self->connection = Z_OBJ_P(connection_zv);
 	GC_ADDREF(self->connection);   /* keep the connection alive for the worker */
+}
+
+PHP_METHOD(TrueAsync_Temporal_Core_Worker, createReplay)
+{
+	zend_string *task_queue = NULL, *namespace = NULL;
+	HashTable *options = NULL;
+
+	ZEND_PARSE_PARAMETERS_START(0, 3)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_STR(task_queue)
+		Z_PARAM_STR(namespace)
+		Z_PARAM_ARRAY_HT(options)
+	ZEND_PARSE_PARAMETERS_END();
+
+	temporal_php_worker_options_t opts;
+	if (!temporal_worker_options_parse(100, options, &opts)) {
+		RETURN_THROWS();
+	}
+
+	void *replay_pusher = NULL;
+	char *err = NULL;
+	void *worker = temporal_php_replay_worker_new(
+		temporal_runtime_handle,
+		namespace != NULL ? ZSTR_VAL(namespace) : "default",
+		task_queue != NULL ? ZSTR_VAL(task_queue) : "replay",
+		&opts, &replay_pusher, &err);
+
+	if (worker == NULL) {
+		zend_throw_exception_ex(temporal_ce_temporal_exception, 0,
+			"Failed to create Temporal replay worker: %s",
+			err != NULL ? err : "unknown error");
+		free(err);
+		RETURN_THROWS();
+	}
+
+	object_init_ex(return_value, temporal_ce_worker);
+	temporal_worker_obj *self = temporal_worker_from_obj(Z_OBJ_P(return_value));
+	self->worker = temporal_php_handle_new(worker, temporal_php_worker_free);
+	if (self->worker == NULL) {
+		temporal_php_replay_pusher_free(replay_pusher);
+		temporal_php_worker_free(worker);
+		zval_ptr_dtor(return_value);
+		ZVAL_UNDEF(return_value);
+		zend_throw_error(NULL, "temporal: out of memory");
+		RETURN_THROWS();
+	}
+	self->replay_pusher = replay_pusher;
+	self->replay = true;
+}
+
+PHP_METHOD(TrueAsync_Temporal_Core_Worker, pushReplayHistory)
+{
+	zend_string *workflow_id, *history;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_STR(workflow_id)
+		Z_PARAM_STR(history)
+	ZEND_PARSE_PARAMETERS_END();
+
+	temporal_worker_obj *self = temporal_worker_from_obj(Z_OBJ_P(ZEND_THIS));
+
+	if (!self->replay) {
+		zend_throw_error(NULL, "pushReplayHistory must be called on a replay worker");
+		RETURN_THROWS();
+	}
+	TEMPORAL_REQUIRE_LIVE_WORKER(self, "pushReplayHistory");
+	if (self->replay_pusher == NULL) {
+		zend_throw_error(NULL, "pushReplayHistory must be called before closeReplayHistory");
+		RETURN_THROWS();
+	}
+
+	char *fail = temporal_php_replay_push(
+		((temporal_php_handle_t *) self->worker)->box,
+		self->replay_pusher,
+		(const uint8_t *) ZSTR_VAL(workflow_id), ZSTR_LEN(workflow_id),
+		(const uint8_t *) ZSTR_VAL(history), ZSTR_LEN(history));
+
+	if (fail != NULL) {
+		zend_throw_exception_ex(temporal_ce_temporal_exception, 0, "%s", fail);
+		free(fail);
+		RETURN_THROWS();
+	}
+}
+
+PHP_METHOD(TrueAsync_Temporal_Core_Worker, closeReplayHistory)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+
+	temporal_worker_obj *self = temporal_worker_from_obj(Z_OBJ_P(ZEND_THIS));
+
+	if (!self->replay) {
+		zend_throw_error(NULL, "closeReplayHistory must be called on a replay worker");
+		RETURN_THROWS();
+	}
+	if (self->replay_pusher != NULL) {
+		temporal_php_replay_pusher_free(self->replay_pusher);
+		self->replay_pusher = NULL;
+	}
 }
 
 PHP_METHOD(TrueAsync_Temporal_Core_Worker, pollActivityTask)

@@ -1,5 +1,5 @@
 /* This is a generated file, edit temporal.stub.php instead.
- * Stub hash: 6d3fc18d5e116fe8ab1be5b9809adff736bb3a39 */
+ * Stub hash: 958dd7c70a230b0589c8c4d90969eb553afa3546 */
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_TrueAsync_Temporal_Core_Connection___construct, 0, 0, 1)
 	ZEND_ARG_TYPE_INFO(0, address, IS_STRING, 0)
@@ -28,6 +28,20 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_class_TrueAsync_Temporal_Core_Worker___construct,
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, options, IS_ARRAY, 0, "[]")
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_TrueAsync_Temporal_Core_Worker_createReplay, 0, 0, TrueAsync\\Temporal\\Core\\Worker, 0)
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, taskQueue, IS_STRING, 0, "\'replay\'")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, namespace, IS_STRING, 0, "\'default\'")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, options, IS_ARRAY, 0, "[]")
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_TrueAsync_Temporal_Core_Worker_pushReplayHistory, 0, 2, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, workflowId, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, history, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_TrueAsync_Temporal_Core_Worker_closeReplayHistory, 0, 0, IS_VOID, 0)
+ZEND_END_ARG_INFO()
+
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_TrueAsync_Temporal_Core_Worker_pollActivityTask, 0, 0, IS_STRING, 1)
 ZEND_END_ARG_INFO()
 
@@ -43,14 +57,16 @@ ZEND_END_ARG_INFO()
 
 #define arginfo_class_TrueAsync_Temporal_Core_Worker_completeWorkflowActivation arginfo_class_TrueAsync_Temporal_Core_Worker_completeActivityTask
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_TrueAsync_Temporal_Core_Worker_initiateShutdown, 0, 0, IS_VOID, 0)
-ZEND_END_ARG_INFO()
+#define arginfo_class_TrueAsync_Temporal_Core_Worker_initiateShutdown arginfo_class_TrueAsync_Temporal_Core_Worker_closeReplayHistory
 
-#define arginfo_class_TrueAsync_Temporal_Core_Worker_finalizeShutdown arginfo_class_TrueAsync_Temporal_Core_Worker_initiateShutdown
+#define arginfo_class_TrueAsync_Temporal_Core_Worker_finalizeShutdown arginfo_class_TrueAsync_Temporal_Core_Worker_closeReplayHistory
 
 ZEND_METHOD(TrueAsync_Temporal_Core_Connection, __construct);
 ZEND_METHOD(TrueAsync_Temporal_Core_Connection, rpcCall);
 ZEND_METHOD(TrueAsync_Temporal_Core_Worker, __construct);
+ZEND_METHOD(TrueAsync_Temporal_Core_Worker, createReplay);
+ZEND_METHOD(TrueAsync_Temporal_Core_Worker, pushReplayHistory);
+ZEND_METHOD(TrueAsync_Temporal_Core_Worker, closeReplayHistory);
 ZEND_METHOD(TrueAsync_Temporal_Core_Worker, pollActivityTask);
 ZEND_METHOD(TrueAsync_Temporal_Core_Worker, completeActivityTask);
 ZEND_METHOD(TrueAsync_Temporal_Core_Worker, recordActivityHeartbeat);
@@ -67,6 +83,9 @@ static const zend_function_entry class_TrueAsync_Temporal_Core_Connection_method
 
 static const zend_function_entry class_TrueAsync_Temporal_Core_Worker_methods[] = {
 	ZEND_ME(TrueAsync_Temporal_Core_Worker, __construct, arginfo_class_TrueAsync_Temporal_Core_Worker___construct, ZEND_ACC_PUBLIC)
+	ZEND_ME(TrueAsync_Temporal_Core_Worker, createReplay, arginfo_class_TrueAsync_Temporal_Core_Worker_createReplay, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(TrueAsync_Temporal_Core_Worker, pushReplayHistory, arginfo_class_TrueAsync_Temporal_Core_Worker_pushReplayHistory, ZEND_ACC_PUBLIC)
+	ZEND_ME(TrueAsync_Temporal_Core_Worker, closeReplayHistory, arginfo_class_TrueAsync_Temporal_Core_Worker_closeReplayHistory, ZEND_ACC_PUBLIC)
 	ZEND_ME(TrueAsync_Temporal_Core_Worker, pollActivityTask, arginfo_class_TrueAsync_Temporal_Core_Worker_pollActivityTask, ZEND_ACC_PUBLIC)
 	ZEND_ME(TrueAsync_Temporal_Core_Worker, completeActivityTask, arginfo_class_TrueAsync_Temporal_Core_Worker_completeActivityTask, ZEND_ACC_PUBLIC)
 	ZEND_ME(TrueAsync_Temporal_Core_Worker, recordActivityHeartbeat, arginfo_class_TrueAsync_Temporal_Core_Worker_recordActivityHeartbeat, ZEND_ACC_PUBLIC)

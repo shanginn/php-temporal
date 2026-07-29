@@ -352,62 +352,77 @@ void temporal_php_cancel_token_free(void *token)
 
 /* --- Worker ------------------------------------------------------------ */
 
-void *temporal_php_worker_new(void *connection, const char *ns, const char *task_queue,
-                      const temporal_php_worker_options_t *options, char **err_out)
-{
-	TemporalCoreWorkerOptions opt;
-	memset(&opt, 0, sizeof(opt));
+typedef struct {
+	TemporalCorePollerBehaviorSimpleMaximum activity;
+	TemporalCorePollerBehaviorSimpleMaximum workflow;
+	TemporalCorePollerBehaviorSimpleMaximum nexus;
+} temporal_php_worker_option_storage_t;
 
-	opt.namespace_ = temporal_php_ref(ns);
-	opt.task_queue = temporal_php_ref(task_queue);
+static void temporal_php_worker_options_init(TemporalCoreWorkerOptions *opt,
+                                      temporal_php_worker_option_storage_t *storage,
+                                      const char *ns, const char *task_queue,
+                                      const temporal_php_worker_options_t *options,
+                                      bool replay)
+{
+	memset(opt, 0, sizeof(*opt));
+	memset(storage, 0, sizeof(*storage));
+
+	opt->namespace_ = temporal_php_ref(ns);
+	opt->task_queue = temporal_php_ref(task_queue);
 
 	/* No versioning. */
-	opt.versioning_strategy.tag = TemporalCoreWorkerVersioningStrategy_None;
-	opt.versioning_strategy.none.build_id = temporal_php_ref("");
+	opt->versioning_strategy.tag = TemporalCoreWorkerVersioningStrategy_None;
+	opt->versioning_strategy.none.build_id = temporal_php_ref("");
 
 	/* Fixed-size slot suppliers. All four must be valid. */
-	opt.tuner.activity_slot_supplier.tag = TemporalCoreSlotSupplier_FixedSize;
-	opt.tuner.activity_slot_supplier.fixed_size.num_slots = options->activity_slots;
-	opt.tuner.workflow_slot_supplier.tag = TemporalCoreSlotSupplier_FixedSize;
-	opt.tuner.workflow_slot_supplier.fixed_size.num_slots = options->workflow_slots;
-	opt.tuner.local_activity_slot_supplier.tag = TemporalCoreSlotSupplier_FixedSize;
-	opt.tuner.local_activity_slot_supplier.fixed_size.num_slots = options->local_activity_slots;
-	opt.tuner.nexus_task_slot_supplier.tag = TemporalCoreSlotSupplier_FixedSize;
-	opt.tuner.nexus_task_slot_supplier.fixed_size.num_slots = options->nexus_slots;
+	opt->tuner.activity_slot_supplier.tag = TemporalCoreSlotSupplier_FixedSize;
+	opt->tuner.activity_slot_supplier.fixed_size.num_slots = options->activity_slots;
+	opt->tuner.workflow_slot_supplier.tag = TemporalCoreSlotSupplier_FixedSize;
+	opt->tuner.workflow_slot_supplier.fixed_size.num_slots = options->workflow_slots;
+	opt->tuner.local_activity_slot_supplier.tag = TemporalCoreSlotSupplier_FixedSize;
+	opt->tuner.local_activity_slot_supplier.fixed_size.num_slots = options->local_activity_slots;
+	opt->tuner.nexus_task_slot_supplier.tag = TemporalCoreSlotSupplier_FixedSize;
+	opt->tuner.nexus_task_slot_supplier.fixed_size.num_slots = options->nexus_slots;
 
 	/* Handle workflow, activity and local-activity tasks (a Temporal worker does
 	 * all three). Local activities run in-process and surface on the same activity
 	 * poll (Start.is_local); without this flag the core never dispatches them and a
-	 * workflow that schedules one hangs until its task times out. */
-	opt.task_types.enable_workflows = true;
-	opt.task_types.enable_remote_activities = true;
-	opt.task_types.enable_local_activities = true;
-	opt.task_types.enable_nexus = false;
+	 * workflow that schedules one hangs until its task times out. Replay Core
+	 * overrides these to workflow-only, but setting that intent here also keeps the
+	 * configuration valid if Core stops applying the override internally. */
+	opt->task_types.enable_workflows = true;
+	opt->task_types.enable_remote_activities = !replay;
+	opt->task_types.enable_local_activities = !replay;
+	opt->task_types.enable_nexus = false;
 
 	/* Sticky execution: keep workflow runs cached between tasks so a fired timer
 	 * or resolved activity resumes the live instance instead of replaying from
 	 * scratch. This is purely a performance optimization: the codec correlates
 	 * commands by a deterministic per-run seq, so replay (eviction, restart, cache
 	 * pressure) stays correct regardless of cache size. */
-	opt.max_cached_workflows = options->max_cached_workflows;
+	opt->max_cached_workflows = options->max_cached_workflows;
 
-	opt.sticky_queue_schedule_to_start_timeout_millis = options->sticky_schedule_to_start_ms;
-	opt.graceful_shutdown_period_millis = options->graceful_shutdown_ms;
-	opt.max_heartbeat_throttle_interval_millis = 60000;
-	opt.default_heartbeat_throttle_interval_millis = 30000;
-	opt.nonsticky_to_sticky_poll_ratio = 0.2f;
+	opt->sticky_queue_schedule_to_start_timeout_millis = options->sticky_schedule_to_start_ms;
+	opt->graceful_shutdown_period_millis = options->graceful_shutdown_ms;
+	opt->max_heartbeat_throttle_interval_millis = 60000;
+	opt->default_heartbeat_throttle_interval_millis = 30000;
+	opt->nonsticky_to_sticky_poll_ratio = 0.2f;
 
-	/* Poller behaviors (simple maximum). These pointers may stay on the stack:
-	 * temporal_core_worker_new consumes the options synchronously. */
-	TemporalCorePollerBehaviorSimpleMaximum act_poll;
-	act_poll.simple_maximum = options->activity_pollers;
-	TemporalCorePollerBehaviorSimpleMaximum wf_poll;
-	wf_poll.simple_maximum = options->workflow_pollers;
-	TemporalCorePollerBehaviorSimpleMaximum nx_poll;
-	nx_poll.simple_maximum = options->nexus_pollers;
-	opt.activity_task_poller_behavior.simple_maximum = &act_poll;
-	opt.workflow_task_poller_behavior.simple_maximum = &wf_poll;
-	opt.nexus_task_poller_behavior.simple_maximum = &nx_poll;
+	/* Core consumes these pointers synchronously during worker construction. */
+	storage->activity.simple_maximum = options->activity_pollers;
+	storage->workflow.simple_maximum = options->workflow_pollers;
+	storage->nexus.simple_maximum = options->nexus_pollers;
+	opt->activity_task_poller_behavior.simple_maximum = &storage->activity;
+	opt->workflow_task_poller_behavior.simple_maximum = &storage->workflow;
+	opt->nexus_task_poller_behavior.simple_maximum = &storage->nexus;
+}
+
+void *temporal_php_worker_new(void *connection, const char *ns, const char *task_queue,
+                      const temporal_php_worker_options_t *options, char **err_out)
+{
+	TemporalCoreWorkerOptions opt;
+	temporal_php_worker_option_storage_t storage;
+	temporal_php_worker_options_init(&opt, &storage, ns, task_queue, options, false);
 
 	TemporalCoreWorkerOrFail result =
 		temporal_core_worker_new((TemporalCoreConnection *) connection, &opt);
@@ -425,6 +440,67 @@ void *temporal_php_worker_new(void *connection, const char *ns, const char *task
 	}
 
 	return result.worker;
+}
+
+void *temporal_php_replay_worker_new(void *runtime, const char *ns, const char *task_queue,
+                             const temporal_php_worker_options_t *options,
+                             void **replay_pusher_out, char **err_out)
+{
+	TemporalCoreWorkerOptions opt;
+	temporal_php_worker_option_storage_t storage;
+	temporal_php_worker_options_init(&opt, &storage, ns, task_queue, options, true);
+
+	TemporalCoreWorkerReplayerOrFail result =
+		temporal_core_worker_replayer_new((TemporalCoreRuntime *) runtime, &opt);
+
+	if (result.worker == NULL || result.worker_replay_pusher == NULL) {
+		if (err_out != NULL) {
+			*err_out = temporal_php_dup_fail(result.fail, "failed to create Temporal replay worker");
+		}
+		if (result.fail != NULL) {
+			temporal_core_byte_array_free((TemporalCoreRuntime *) temporal_php_g_runtime, result.fail);
+		}
+		if (result.worker_replay_pusher != NULL) {
+			temporal_core_worker_replay_pusher_free(result.worker_replay_pusher);
+		}
+		if (result.worker != NULL) {
+			temporal_core_worker_free(result.worker);
+		}
+		return NULL;
+	}
+
+	*replay_pusher_out = result.worker_replay_pusher;
+	return result.worker;
+}
+
+void temporal_php_replay_pusher_free(void *replay_pusher)
+{
+	if (replay_pusher != NULL) {
+		temporal_core_worker_replay_pusher_free(
+			(TemporalCoreWorkerReplayPusher *) replay_pusher);
+	}
+}
+
+char *temporal_php_replay_push(void *worker, void *replay_pusher,
+                       const uint8_t *workflow_id, size_t workflow_id_len,
+                       const uint8_t *history, size_t history_len)
+{
+	TemporalCoreByteArrayRef workflow_id_ref = {
+		.data = workflow_id,
+		.size = workflow_id_len,
+	};
+	TemporalCoreByteArrayRef history_ref = {
+		.data = history,
+		.size = history_len,
+	};
+
+	TemporalCoreWorkerReplayPushResult result =
+		temporal_core_worker_replay_push((TemporalCoreWorker *) worker,
+			(TemporalCoreWorkerReplayPusher *) replay_pusher,
+			workflow_id_ref, history_ref);
+
+	size_t fail_len = 0;
+	return temporal_php_copy_str(temporal_php_g_runtime, result.fail, &fail_len);
 }
 
 void temporal_php_worker_free(void *worker)

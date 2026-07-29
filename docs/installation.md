@@ -7,8 +7,9 @@ under `third_party/sdk-rust` and built once with `cargo`.
 ## Requirements
 
 - PHP 8.x built with **ZTS** and the **TrueAsync** runtime (`php-config` on PATH).
-- A **Rust** toolchain (`cargo`); the vendored core pins its own toolchain via
-  `rust-toolchain.toml`, so `rustup` fetches the right version automatically.
+- A **Rust** toolchain (`cargo`); the vendored core pins Rust 1.94 via
+  `rust-toolchain.toml`. The commands below select that toolchain explicitly
+  because they are run from the extension root, outside the submodule.
 - `protobuf-compiler` (`protoc`) — needed to build the core, and later for the
   generated PHP message classes.
 - The usual extension build tools: `phpize`, `make`, a C compiler.
@@ -21,7 +22,7 @@ git submodule update --init --recursive
 
 # 2. Build the core C bridge (cdylib). First build is slow (~2-3 min); the
 #    artifact lands in third_party/sdk-rust/target/release/.
-cargo build --release -p temporalio-sdk-core-c-bridge \
+cargo +1.94 build --release -p temporalio-sdk-core-c-bridge \
   --manifest-path third_party/sdk-rust/Cargo.toml
 
 # 3. Build the extension against the prebuilt bridge.

@@ -37,10 +37,13 @@ static zend_always_inline temporal_connection_obj *temporal_connection_from_obj(
 	return (temporal_connection_obj *) ((char *) obj - offsetof(temporal_connection_obj, std));
 }
 
-/* Core\Worker object: owns one core worker handle + a ref to its connection. */
+/* Core\Worker object: owns one core worker handle and, depending on how it was
+ * created, either a connection ref or a replay-history pusher. */
 typedef struct {
 	void        *worker;
 	zend_object *connection;   /* the Core\Connection object, ref held */
+	void        *replay_pusher;
+	bool         replay;
 	bool         finalized;    /* finalizeShutdown ran: the core handle is spent */
 	zend_object  std;
 } temporal_worker_obj;

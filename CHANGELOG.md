@@ -36,6 +36,10 @@ transport through a `ServiceClientInterface` adapter — see the
   coresdk protobuf, decoded in PHP. After `initiateShutdown()`, drain every poll
   in use (each returns null) before `finalizeShutdown()`, which waits for all
   enabled pollers to wind down.
+- Native offline workflow replay through `Core\Worker::createReplay()`,
+  `pushReplayHistory(workflowId, historyBytes)`, and
+  `closeReplayHistory()`. Replay reuses the normal workflow
+  activation/completion methods and needs no Temporal server connection.
 - The connection now defaults its identity to `<pid>@<hostname>` when none is
   given (required by workers).
 - `Core\Worker::recordActivityHeartbeat(bytes)` — records an activity heartbeat
@@ -63,6 +67,9 @@ transport through a `ServiceClientInterface` adapter — see the
   before the callback (notify-after-release), so finalize deterministically sees
   sole ownership. This fork's original fix was accepted upstream in
   `temporalio/sdk-rust#1365`.
+- Closing a replay history stream immediately after its final push no longer
+  risks freeing the C-bridge sender while the asynchronous send still owns it.
+  The spawned send now holds its own sender clone until enqueueing completes.
 - `rpcCall` metadata keys/values embedding a newline are rejected with a
   `ValueError` instead of corrupting the core's `key\nvalue` wire form; a
   negative timeout is rejected instead of being silently cast to a huge uint32.

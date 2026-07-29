@@ -24,7 +24,7 @@ if test "$PHP_TEMPORAL" != "no"; then
 
   dnl The Rust core C bridge (cdylib) is built ahead of time with cargo; we
   dnl link against the prebuilt shared library (see docs/installation.md):
-  dnl   cargo build --release -p temporalio-sdk-core-c-bridge \
+  dnl   cargo +1.94 build --release -p temporalio-sdk-core-c-bridge \
   dnl     --manifest-path third_party/sdk-rust/Cargo.toml
   case "$host_os" in
     darwin*)
@@ -38,7 +38,7 @@ if test "$PHP_TEMPORAL" != "no"; then
   AC_MSG_CHECKING([for the prebuilt Temporal core c-bridge library])
   if test ! -f "$TEMPORAL_CORE_LIBRARY"; then
     AC_MSG_ERROR([Temporal core c-bridge is not built. Build it first:
-  cargo build --release -p temporalio-sdk-core-c-bridge \
+  cargo +1.94 build --release -p temporalio-sdk-core-c-bridge \
     --manifest-path third_party/sdk-rust/Cargo.toml])
   fi
   AC_MSG_RESULT([found])

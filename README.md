@@ -56,7 +56,9 @@ Just the transport seam:
   `rpcCall(service, method, requestBytes): responseBytes`.
 - `TrueAsync\Temporal\Core\Worker` — the worker transport: poll/complete for
   activity tasks and workflow activations, activity heartbeat recording, and
-  the shutdown lifecycle.
+  the shutdown lifecycle. It also exposes an offline replay worker that accepts
+  serialized `Temporal\Api\History\V1\History` messages, so the reused SDK can
+  verify workflow histories without a server.
 - `TrueAsync\Temporal\{TemporalException, ConnectionException, ServiceException}`.
 
 Everything user-facing (workflow client, options, data converter, the generated
@@ -124,6 +126,31 @@ $core = new CoreWorker(new Connection('127.0.0.1:7233'), 'orders');  // 'orders'
 `run()` blocks until the core shuts down; call `$worker->shutdown()` from a signal
 handler or another coroutine to stop the loops, after which `run()` finalizes and
 returns.
+
+### Replay a workflow history
+
+Replay uses the same workflow activation/completion path as a live worker, but
+the Core worker is created without a server connection. The high-level SDK's
+`WorkflowReplayer` drives this API; extension integrations can use the low-level
+transport directly:
+
+```php
+use TrueAsync\Temporal\Core\Worker as CoreWorker;
+
+$replay = CoreWorker::createReplay();
+$replay->pushReplayHistory($workflowId, $history->serializeToString());
+$replay->closeReplayHistory();
+
+while (($activation = $replay->pollWorkflowActivation()) !== null) {
+    $replay->completeWorkflowActivation(handleActivation($activation));
+}
+$replay->finalizeShutdown();
+```
+
+`pushReplayHistory()` accepts a serialized
+`Temporal\Api\History\V1\History`. Close the input stream after the final
+history; Core then shuts the replay worker down after all queued histories have
+finished.
 
 ### Signal and query a running workflow
 
@@ -218,7 +245,7 @@ SDK's client layer on top, in-process on the TrueAsync reactor.
 
 ```sh
 git submodule update --init --recursive
-cargo build --release -p temporalio-sdk-core-c-bridge \
+cargo +1.94 build --release -p temporalio-sdk-core-c-bridge \
   --manifest-path third_party/sdk-rust/Cargo.toml      # build the Rust core bridge (once)
 phpize && ./configure --enable-temporal --with-php-config="$(command -v php-config)"
 make -j"$(nproc)"                                        # -> modules/temporal.so

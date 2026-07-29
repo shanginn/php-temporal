@@ -126,8 +126,19 @@ typedef struct {
  * worker_new is synchronous in the core. */
 void *temporal_php_worker_new(void *connection, const char *ns, const char *task_queue,
                       const temporal_php_worker_options_t *options, char **err_out);
+void *temporal_php_replay_worker_new(void *runtime, const char *ns, const char *task_queue,
+                             const temporal_php_worker_options_t *options,
+                             void **replay_pusher_out, char **err_out);
 void  temporal_php_worker_free(void *worker);
 void  temporal_php_worker_initiate_shutdown(void *worker);
+
+/* Replay workers consume serialized temporal.api.history.v1.History messages
+ * through a pusher. Freeing the pusher closes the history stream; Core then
+ * auto-shuts down after every queued history has completed. */
+void  temporal_php_replay_pusher_free(void *replay_pusher);
+char *temporal_php_replay_push(void *worker, void *replay_pusher,
+                       const uint8_t *workflow_id, size_t workflow_id_len,
+                       const uint8_t *history, size_t history_len);
 
 /* Poll delivery (core thread). Exactly one case:
  *   - a task   : `task` (`task_len` bytes) borrows the core-owned `task_owner`
