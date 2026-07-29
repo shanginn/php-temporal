@@ -82,7 +82,10 @@ final class Worker
      * - gracefulShutdownMs (0) — how long in-flight activities get after
      *   initiateShutdown() before the core cancels them;
      * - activityPollers (5), workflowPollers (2), nexusPollers (1) — poller
-     *   maximums.
+     *   maximums;
+     * - identity, activity rate limits, heartbeat throttling, eager-activity
+     *   reservations, workflow polling, and Temporal worker
+     *   versioning/deployment fields.
      */
     public function __construct(Connection $connection, string $taskQueue, string $namespace = 'default', int $maxConcurrentActivities = 100, array $options = []) {}
 

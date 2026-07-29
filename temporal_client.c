@@ -835,6 +835,58 @@ static bool temporal_worker_option(HashTable *options, const char *key,
 	return true;
 }
 
+static bool temporal_worker_float_option(HashTable *options, const char *key, double *out)
+{
+	zval *v = zend_hash_str_find_deref(options, key, strlen(key));
+
+	if (v == NULL) {
+		return true;
+	}
+
+	if ((Z_TYPE_P(v) != IS_DOUBLE && Z_TYPE_P(v) != IS_LONG)
+		|| zval_get_double(v) < 0.0) {
+		zend_value_error("Worker option '%s' must be a non-negative number", key);
+		return false;
+	}
+
+	*out = zval_get_double(v);
+	return true;
+}
+
+static bool temporal_worker_bool_option(HashTable *options, const char *key, bool *out)
+{
+	zval *v = zend_hash_str_find_deref(options, key, strlen(key));
+
+	if (v == NULL) {
+		return true;
+	}
+
+	if (Z_TYPE_P(v) != IS_TRUE && Z_TYPE_P(v) != IS_FALSE) {
+		zend_value_error("Worker option '%s' must be a boolean", key);
+		return false;
+	}
+
+	*out = zend_is_true(v);
+	return true;
+}
+
+static bool temporal_worker_string_option(HashTable *options, const char *key, const char **out)
+{
+	zval *v = zend_hash_str_find_deref(options, key, strlen(key));
+
+	if (v == NULL) {
+		return true;
+	}
+
+	if (Z_TYPE_P(v) != IS_STRING) {
+		zend_value_error("Worker option '%s' must be a string", key);
+		return false;
+	}
+
+	*out = Z_STRVAL_P(v);
+	return true;
+}
+
 static bool temporal_worker_options_parse(zend_long max_activities, HashTable *options,
                                           temporal_php_worker_options_t *opts)
 {
@@ -851,9 +903,20 @@ static bool temporal_worker_options_parse(zend_long max_activities, HashTable *o
 		.max_cached_workflows = 1000,
 		.sticky_schedule_to_start_ms = 10000,
 		.graceful_shutdown_ms = 0,
+		.max_heartbeat_throttle_ms = 60000,
+		.max_activities_per_second = 0.0,
+		.max_task_queue_activities_per_second = 0.0,
 		.activity_pollers = 5,
 		.workflow_pollers = 2,
 		.nexus_pollers = 1,
+		.max_eager_activity_reservations_per_workflow_task = (uint32_t) max_activities,
+		.identity = "",
+		.build_id = "",
+		.deployment_name = "",
+		.versioning_behavior = 0,
+		.versioning_strategy = 0,
+		.deployment_use_versioning = false,
+		.disable_workflows = false,
 	};
 
 	if (options == NULL) {
@@ -883,12 +946,54 @@ static bool temporal_worker_options_parse(zend_long max_activities, HashTable *o
 	TPHP_WORKER_OPT32("maxCachedWorkflows",  0, max_cached_workflows);
 	TPHP_WORKER_OPT64("stickyScheduleToStartTimeoutMs", 1, sticky_schedule_to_start_ms);
 	TPHP_WORKER_OPT64("gracefulShutdownMs",  0, graceful_shutdown_ms);
+	TPHP_WORKER_OPT64("maxHeartbeatThrottleMs", 0, max_heartbeat_throttle_ms);
 	TPHP_WORKER_OPT32("activityPollers",      1, activity_pollers);
 	TPHP_WORKER_OPT32("workflowPollers",      1, workflow_pollers);
 	TPHP_WORKER_OPT32("nexusPollers",         1, nexus_pollers);
+	TPHP_WORKER_OPT32("maxEagerActivityReservationsPerWorkflowTask", 0,
+		max_eager_activity_reservations_per_workflow_task);
+	v = (uint64_t) opts->versioning_behavior;
+	if (!temporal_worker_option(options, "versioningBehavior", 0, 2, &v)) {
+		return false;
+	}
+	opts->versioning_behavior = (int32_t) v;
 
 #undef TPHP_WORKER_OPT32
 #undef TPHP_WORKER_OPT64
+
+	if (!temporal_worker_float_option(options, "maxActivitiesPerSecond",
+			&opts->max_activities_per_second)
+		|| !temporal_worker_float_option(options, "maxTaskQueueActivitiesPerSecond",
+			&opts->max_task_queue_activities_per_second)
+		|| !temporal_worker_bool_option(options, "deploymentUseVersioning",
+			&opts->deployment_use_versioning)
+		|| !temporal_worker_bool_option(options, "disableWorkflows",
+			&opts->disable_workflows)
+		|| !temporal_worker_string_option(options, "identity", &opts->identity)
+		|| !temporal_worker_string_option(options, "buildId", &opts->build_id)
+		|| !temporal_worker_string_option(options, "deploymentName", &opts->deployment_name)) {
+		return false;
+	}
+
+	zval *strategy = zend_hash_str_find_deref(options, "versioningStrategy",
+		sizeof("versioningStrategy") - 1);
+	if (strategy != NULL) {
+		if (Z_TYPE_P(strategy) != IS_LONG || Z_LVAL_P(strategy) < 0 || Z_LVAL_P(strategy) > 2) {
+			zend_value_error("Worker option 'versioningStrategy' must be 0, 1, or 2");
+			return false;
+		}
+		opts->versioning_strategy = (uint8_t) Z_LVAL_P(strategy);
+	}
+
+	if (opts->versioning_strategy == 1
+		&& (opts->deployment_name[0] == '\0' || opts->build_id[0] == '\0')) {
+		zend_value_error("Deployment versioning requires non-empty deploymentName and buildId");
+		return false;
+	}
+	if (opts->versioning_strategy == 2 && opts->build_id[0] == '\0') {
+		zend_value_error("Legacy build ID versioning requires a non-empty buildId");
+		return false;
+	}
 
 	return true;
 }

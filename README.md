@@ -209,23 +209,21 @@ a live server today:
   child workflows, continue-as-new, signalling and cancelling external/child
   workflows, updates (validate/accept/reject/complete), upserting search
   attributes (untyped and typed) and memo, panic, versioning
-  (`Workflow::getVersion()` / patches), and surviving a reset (the reset run's
-  new random seed is consumed and it re-executes cleanly).
+  (`Workflow::getVersion()` / patches and Worker Deployment Versioning), local
+  activity retry/backoff, and surviving a reset (the reset run's new random
+  seed is consumed and it re-executes cleanly).
 
-In progress: the local-activity long-retry backoff path. Anything not yet mapped
-raises an explicit error rather than failing silently.
+Anything not yet mapped raises an explicit error rather than failing silently.
 
-**Side effects are intentionally not supported** (`Workflow::sideEffect()`, and
-`Workflow::uuid()`, which is built on it) — this is a property of the Rust core,
-not an omission here. The RoadRunner/Go host records a side effect's value as a
-workflow-history *marker* and replays it from history. The core's command
-protocol has no marker mechanism (only patch markers, for versioning) and no
-side-effect resolution job, so the value cannot be persisted for replay: running
-the closure on the first attempt only would yield a different — or absent — value
-when the run is later replayed, breaking determinism. The core's replacement for
-non-deterministic work is the **local activity** (supported), whose result the
-core itself records in history. The newer core-based SDKs (TypeScript, Python)
-omit `sideEffect()` for the same reason.
+`Workflow::sideEffect()`, `uuid()`, `uuid4()`, and `uuid7()` remain available in
+the TrueAsync SDK. Because Core exposes patch markers but no generic marker
+command, the SDK records these values through an internal
+`core_local_activity`; Core persists the result and supplies it during replay.
+This is deterministic, but it deliberately produces different history from the
+old RoadRunner `SideEffect` and `Version` markers. Drain or complete executions
+that already contain those legacy markers before switching their task queue to
+the TrueAsync worker, unless their histories have been separately replay-tested
+against the new build.
 
 ## Why
 

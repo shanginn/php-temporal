@@ -116,9 +116,20 @@ typedef struct {
 	uint32_t max_cached_workflows;
 	uint64_t sticky_schedule_to_start_ms;
 	uint64_t graceful_shutdown_ms;
+	uint64_t max_heartbeat_throttle_ms;
+	double max_activities_per_second;
+	double max_task_queue_activities_per_second;
 	uint32_t activity_pollers;
 	uint32_t workflow_pollers;
 	uint32_t nexus_pollers;
+	uint32_t max_eager_activity_reservations_per_workflow_task;
+	const char *identity;
+	const char *build_id;
+	const char *deployment_name;
+	int32_t versioning_behavior;
+	uint8_t versioning_strategy;
+	bool deployment_use_versioning;
+	bool disable_workflows;
 } temporal_php_worker_options_t;
 
 /* Create a worker on a task queue handling both workflow and activity tasks.

@@ -370,9 +370,29 @@ static void temporal_php_worker_options_init(TemporalCoreWorkerOptions *opt,
 	opt->namespace_ = temporal_php_ref(ns);
 	opt->task_queue = temporal_php_ref(task_queue);
 
-	/* No versioning. */
-	opt->versioning_strategy.tag = TemporalCoreWorkerVersioningStrategy_None;
-	opt->versioning_strategy.none.build_id = temporal_php_ref("");
+	switch (options->versioning_strategy) {
+		case 1:
+			opt->versioning_strategy.tag = TemporalCoreWorkerVersioningStrategy_DeploymentBased;
+			opt->versioning_strategy.deployment_based.version.deployment_name =
+				temporal_php_ref(options->deployment_name);
+			opt->versioning_strategy.deployment_based.version.build_id =
+				temporal_php_ref(options->build_id);
+			opt->versioning_strategy.deployment_based.use_worker_versioning =
+				options->deployment_use_versioning;
+			opt->versioning_strategy.deployment_based.default_versioning_behavior =
+				options->versioning_behavior;
+			break;
+		case 2:
+			opt->versioning_strategy.tag = TemporalCoreWorkerVersioningStrategy_LegacyBuildIdBased;
+			opt->versioning_strategy.legacy_build_id_based.build_id =
+				temporal_php_ref(options->build_id);
+			break;
+		default:
+			opt->versioning_strategy.tag = TemporalCoreWorkerVersioningStrategy_None;
+			opt->versioning_strategy.none.build_id = temporal_php_ref(options->build_id);
+			break;
+	}
+	opt->identity_override = temporal_php_ref(options->identity);
 
 	/* Fixed-size slot suppliers. All four must be valid. */
 	opt->tuner.activity_slot_supplier.tag = TemporalCoreSlotSupplier_FixedSize;
@@ -390,9 +410,9 @@ static void temporal_php_worker_options_init(TemporalCoreWorkerOptions *opt,
 	 * workflow that schedules one hangs until its task times out. Replay Core
 	 * overrides these to workflow-only, but setting that intent here also keeps the
 	 * configuration valid if Core stops applying the override internally. */
-	opt->task_types.enable_workflows = true;
+	opt->task_types.enable_workflows = replay || !options->disable_workflows;
 	opt->task_types.enable_remote_activities = !replay;
-	opt->task_types.enable_local_activities = !replay;
+	opt->task_types.enable_local_activities = !replay && !options->disable_workflows;
 	opt->task_types.enable_nexus = false;
 
 	/* Sticky execution: keep workflow runs cached between tasks so a fired timer
@@ -404,8 +424,12 @@ static void temporal_php_worker_options_init(TemporalCoreWorkerOptions *opt,
 
 	opt->sticky_queue_schedule_to_start_timeout_millis = options->sticky_schedule_to_start_ms;
 	opt->graceful_shutdown_period_millis = options->graceful_shutdown_ms;
-	opt->max_heartbeat_throttle_interval_millis = 60000;
+	opt->max_heartbeat_throttle_interval_millis = options->max_heartbeat_throttle_ms;
 	opt->default_heartbeat_throttle_interval_millis = 30000;
+	opt->max_activities_per_second = options->max_activities_per_second;
+	opt->max_task_queue_activities_per_second = options->max_task_queue_activities_per_second;
+	opt->max_eager_activity_reservations_per_workflow_task =
+		options->max_eager_activity_reservations_per_workflow_task;
 	opt->nonsticky_to_sticky_poll_ratio = 0.2f;
 
 	/* Core consumes these pointers synchronously during worker construction. */
