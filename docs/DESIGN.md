@@ -265,7 +265,7 @@ direction, not the current design.
 
 * `sdk-core-c-bridge` is built **separately, ahead of `configure`**, with
   `cargo build --release` as a `cdylib`; vendored as a git submodule under
-  `third_party/sdk-rust` — our fork `true-async/sdk-rust`, currently based on
+  `third_party/sdk-rust` — our fork `shanginn/sdk-rust`, currently based on
   post-v0.5.0 upstream Core. Its original worker-shutdown fix is included
   upstream as `temporalio/sdk-rust#1365`.
 * `config.m4` does **not** build the bridge: it locates the prebuilt

@@ -8,13 +8,13 @@ The project is pre-release; the public API is not yet stable.
 This extension is a thin native transport. The high-level client API is the
 reused official Temporal PHP SDK (the `Temporal\*` namespace) running on this
 transport through a `ServiceClientInterface` adapter — see the
-[`true-async/sdk-php`](https://github.com/true-async/sdk-php) fork (branch
+[`shanginn/sdk-php`](https://github.com/shanginn/sdk-php) fork (branch
 `true-async`).
 
 ### Added
 - Links the official Temporal Rust core (`sdk-core-c-bridge`), vendored as a
   submodule under `third_party/sdk-rust`. Points at our fork
-  (`true-async/sdk-rust`, branch `true-async`), currently based on post-v0.5.0
+  (`shanginn/sdk-rust`, branch `true-async`), currently based on post-v0.5.0
   upstream Core. The c-bridge worker shutdown fix originally carried by the fork
   is now included upstream (see Fixed). The bridge header is isolated in a
   Zend-free shim (`temporal_core.c`).

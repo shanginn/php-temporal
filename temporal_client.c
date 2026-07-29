@@ -1203,7 +1203,7 @@ PHP_METHOD(TrueAsync_Temporal_Core_Worker, finalizeShutdown)
 	TEMPORAL_REQUIRE_LIVE_WORKER(self, "finalizeShutdown");
 	TEMPORAL_ENSURE_COROUTINE();
 
-	/* No settle race here: our vendored core (true-async/sdk-rust) drops each
+	/* No settle race here: our vendored core (shanginn/sdk-rust) drops each
 	 * poll/complete task's worker clone before waking us (notify-after-release),
 	 * so finalize's Arc::try_unwrap deterministically sees sole ownership. */
 	temporal_outcome_t out;
