@@ -31,7 +31,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.PHP_PREFIX }}
-          key: trueasync-php-v3-${{ runner.os }}-${{ steps.phpsrc.outputs.sha }}-${{ steps.phpsrc.outputs.asha }}
+          key: trueasync-php-v4-${{ runner.os }}-${{ steps.phpsrc.outputs.sha }}-${{ steps.phpsrc.outputs.asha }}
 
       - name: Build TrueAsync PHP
         if: steps.php-cache.outputs.cache-hit != 'true'
