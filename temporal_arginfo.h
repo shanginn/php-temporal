@@ -1,5 +1,5 @@
 /* This is a generated file, edit temporal.stub.php instead.
- * Stub hash: b9ff89bce5c779664c341880817a6b25f51b439c */
+ * Stub hash: ef402250c0f1ea645d3d27fadfb23710030be53d */
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_TrueAsync_Temporal_Core_Connection___construct, 0, 0, 1)
 	ZEND_ARG_TYPE_INFO(0, address, IS_STRING, 0)

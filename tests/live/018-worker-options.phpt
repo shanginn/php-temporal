@@ -45,6 +45,62 @@ await(spawn(function () {
     $worker->finalizeShutdown();
     var_dump('lifecycle ok');
 
+    // Structured slot suppliers and poller behavior map onto Core's native
+    // resource tuner/autoscaler. Flat limits are bounded fallbacks.
+    $resourceSupplier = static fn (
+        int $minimum,
+        int $maximum,
+        int $rampThrottleMs,
+    ): array => [
+        'type' => 'resourceBased',
+        'minimumSlots' => $minimum,
+        'maximumSlots' => $maximum,
+        'rampThrottleMs' => $rampThrottleMs,
+        'targetMemoryUsage' => 0.75,
+        'targetCpuUsage' => 0.85,
+    ];
+    $tuned = new Worker(
+        $conn,
+        'tuned-' . bin2hex(random_bytes(3)),
+        temporal_test_namespace(),
+        20,
+        [
+            'workflowSlots' => 20,
+            'localActivitySlots' => 20,
+            'nexusSlots' => 20,
+            'activitySlotSupplier' => $resourceSupplier(1, 20, 50),
+            'workflowSlotSupplier' => $resourceSupplier(5, 20, 0),
+            'localActivitySlotSupplier' => $resourceSupplier(1, 20, 50),
+            'nexusSlotSupplier' => $resourceSupplier(1, 20, 50),
+            'activityPollers' => 8,
+            'workflowPollers' => 8,
+            'nexusPollers' => 8,
+            'activityPollerBehavior' => [
+                'type' => 'autoscaling',
+                'minimum' => 1,
+                'maximum' => 8,
+                'initial' => 2,
+            ],
+            'workflowPollerBehavior' => [
+                'type' => 'autoscaling',
+                'minimum' => 1,
+                'maximum' => 8,
+                'initial' => 2,
+            ],
+            'nexusPollerBehavior' => [
+                'type' => 'simpleMaximum',
+                'maximum' => 3,
+            ],
+            'enableNexus' => true,
+        ],
+    );
+    $tuned->initiateShutdown();
+    $tuned->pollWorkflowActivation();
+    $tuned->pollActivityTask();
+    $tuned->pollNexusTask();
+    $tuned->finalizeShutdown();
+    var_dump('tuned lifecycle ok');
+
     $activityOnly = new Worker(
         $conn,
         'activity-only-' . bin2hex(random_bytes(3)),
@@ -83,13 +139,68 @@ await(spawn(function () {
     } catch (ValueError $e) {
         var_dump($e->getMessage());
     }
+    try {
+        new Worker($conn, 'opts-bad', temporal_test_namespace(), 8, [
+            'workflowSlotSupplier' => [
+                'type' => 'resourceBased',
+                'minimumSlots' => 10,
+                'maximumSlots' => 9,
+                'rampThrottleMs' => 0,
+                'targetMemoryUsage' => 0.75,
+                'targetCpuUsage' => 0.85,
+            ],
+        ]);
+    } catch (ValueError $e) {
+        var_dump($e->getMessage());
+    }
+    try {
+        new Worker($conn, 'opts-bad', temporal_test_namespace(), 8, [
+            'activitySlotSupplier' => [
+                'type' => 'resourceBased',
+                'minimumSlots' => 1,
+                'maximumSlots' => 10,
+                'rampThrottleMs' => 50,
+                'targetMemoryUsage' => 0.0,
+                'targetCpuUsage' => 0.85,
+            ],
+        ]);
+    } catch (ValueError $e) {
+        var_dump($e->getMessage());
+    }
+    try {
+        new Worker($conn, 'opts-bad', temporal_test_namespace(), 8, [
+            'workflowPollerBehavior' => [
+                'type' => 'simpleMaximum',
+                'maximum' => 1,
+            ],
+        ]);
+    } catch (ValueError $e) {
+        var_dump($e->getMessage());
+    }
+    try {
+        new Worker($conn, 'opts-bad', temporal_test_namespace(), 8, [
+            'activityPollerBehavior' => [
+                'type' => 'autoscaling',
+                'minimum' => 2,
+                'maximum' => 5,
+                'initial' => 6,
+            ],
+        ]);
+    } catch (ValueError $e) {
+        var_dump($e->getMessage());
+    }
 }));
 ?>
 --EXPECT--
 string(12) "lifecycle ok"
+string(18) "tuned lifecycle ok"
 string(16) "activity only ok"
 string(73) "Worker option 'workflowSlots' must be an integer between 1 and 4294967295"
 string(75) "Worker option 'activityPollers' must be an integer between 1 and 4294967295"
 string(57) "maxConcurrentActivities must be a positive 32-bit integer"
 string(67) "Deployment versioning requires non-empty deploymentName and buildId"
 string(69) "Worker option 'versioningBehavior' must be an integer between 0 and 2"
+string(95) "Worker option 'workflowSlotSupplier.maximumSlots' must be greater than or equal to minimumSlots"
+string(100) "Worker option 'activitySlotSupplier.targetMemoryUsage' must be a number greater than 0 and at most 1"
+string(90) "Worker option 'workflowPollerBehavior.maximum' must be an integer between 2 and 4294967295"
+string(82) "Worker option 'activityPollerBehavior.initial' must be between minimum and maximum"

@@ -887,6 +887,202 @@ static bool temporal_worker_string_option(HashTable *options, const char *key, c
 	return true;
 }
 
+static bool temporal_worker_nested_uint_option(
+	HashTable *options,
+	const char *parent,
+	const char *key,
+	zend_long min,
+	zend_long max,
+	uint64_t *out)
+{
+	zval *v = zend_hash_str_find_deref(options, key, strlen(key));
+
+	if (v == NULL || Z_TYPE_P(v) != IS_LONG || Z_LVAL_P(v) < min || Z_LVAL_P(v) > max) {
+		zend_value_error(
+			"Worker option '%s.%s' must be an integer between " ZEND_LONG_FMT
+			" and " ZEND_LONG_FMT,
+			parent, key, min, max);
+		return false;
+	}
+
+	*out = (uint64_t) Z_LVAL_P(v);
+	return true;
+}
+
+static bool temporal_worker_nested_usage_option(
+	HashTable *options,
+	const char *parent,
+	const char *key,
+	double *out)
+{
+	zval *v = zend_hash_str_find_deref(options, key, strlen(key));
+
+	if (v == NULL || (Z_TYPE_P(v) != IS_DOUBLE && Z_TYPE_P(v) != IS_LONG)) {
+		zend_value_error(
+			"Worker option '%s.%s' must be a number greater than 0 and at most 1",
+			parent, key);
+		return false;
+	}
+
+	double value = zval_get_double(v);
+	if (!zend_finite(value) || value <= 0.0 || value > 1.0) {
+		zend_value_error(
+			"Worker option '%s.%s' must be a number greater than 0 and at most 1",
+			parent, key);
+		return false;
+	}
+
+	*out = value;
+	return true;
+}
+
+static bool temporal_worker_slot_supplier_option(
+	HashTable *options,
+	const char *key,
+	temporal_php_slot_supplier_options_t *out)
+{
+	zval *value = zend_hash_str_find_deref(options, key, strlen(key));
+	if (value == NULL) {
+		return true;
+	}
+	if (Z_TYPE_P(value) != IS_ARRAY) {
+		zend_value_error("Worker option '%s' must be an array", key);
+		return false;
+	}
+
+	HashTable *supplier = Z_ARRVAL_P(value);
+	zval *type = zend_hash_str_find_deref(supplier, "type", sizeof("type") - 1);
+	if (type == NULL || Z_TYPE_P(type) != IS_STRING) {
+		zend_value_error("Worker option '%s.type' must be 'fixed' or 'resourceBased'", key);
+		return false;
+	}
+
+	if (zend_string_equals_literal(Z_STR_P(type), "fixed")) {
+		uint64_t slots = 0;
+		if (!temporal_worker_nested_uint_option(
+				supplier, key, "slots", 1, (zend_long) UINT32_MAX, &slots)) {
+			return false;
+		}
+		*out = (temporal_php_slot_supplier_options_t) {
+			.type = TPHP_SLOT_SUPPLIER_FIXED,
+			.fixed_slots = (uint32_t) slots,
+		};
+		return true;
+	}
+
+	if (zend_string_equals_literal(Z_STR_P(type), "resourceBased")) {
+		uint64_t minimum = 0;
+		uint64_t maximum = 0;
+		uint64_t ramp_throttle_ms = 0;
+		double target_memory_usage = 0.0;
+		double target_cpu_usage = 0.0;
+
+		if (!temporal_worker_nested_uint_option(
+				supplier, key, "minimumSlots", 1, (zend_long) UINT32_MAX, &minimum)
+			|| !temporal_worker_nested_uint_option(
+				supplier, key, "maximumSlots", 1, (zend_long) UINT32_MAX, &maximum)
+			|| !temporal_worker_nested_uint_option(
+				supplier, key, "rampThrottleMs", 0, ZEND_LONG_MAX, &ramp_throttle_ms)
+			|| !temporal_worker_nested_usage_option(
+				supplier, key, "targetMemoryUsage", &target_memory_usage)
+			|| !temporal_worker_nested_usage_option(
+				supplier, key, "targetCpuUsage", &target_cpu_usage)) {
+			return false;
+		}
+		if (maximum < minimum) {
+			zend_value_error(
+				"Worker option '%s.maximumSlots' must be greater than or equal to minimumSlots",
+				key);
+			return false;
+		}
+
+		*out = (temporal_php_slot_supplier_options_t) {
+			.type = TPHP_SLOT_SUPPLIER_RESOURCE_BASED,
+			.minimum_slots = (uint32_t) minimum,
+			.maximum_slots = (uint32_t) maximum,
+			.ramp_throttle_ms = ramp_throttle_ms,
+			.target_memory_usage = target_memory_usage,
+			.target_cpu_usage = target_cpu_usage,
+		};
+		return true;
+	}
+
+	zend_value_error("Worker option '%s.type' must be 'fixed' or 'resourceBased'", key);
+	return false;
+}
+
+static bool temporal_worker_poller_behavior_option(
+	HashTable *options,
+	const char *key,
+	uint32_t simple_minimum,
+	temporal_php_poller_behavior_options_t *out)
+{
+	zval *value = zend_hash_str_find_deref(options, key, strlen(key));
+	if (value == NULL) {
+		return true;
+	}
+	if (Z_TYPE_P(value) != IS_ARRAY) {
+		zend_value_error("Worker option '%s' must be an array", key);
+		return false;
+	}
+
+	HashTable *behavior = Z_ARRVAL_P(value);
+	zval *type = zend_hash_str_find_deref(behavior, "type", sizeof("type") - 1);
+	if (type == NULL || Z_TYPE_P(type) != IS_STRING) {
+		zend_value_error(
+			"Worker option '%s.type' must be 'simpleMaximum' or 'autoscaling'", key);
+		return false;
+	}
+
+	if (zend_string_equals_literal(Z_STR_P(type), "simpleMaximum")) {
+		uint64_t maximum = 0;
+		if (!temporal_worker_nested_uint_option(
+				behavior, key, "maximum", simple_minimum, (zend_long) UINT32_MAX, &maximum)) {
+			return false;
+		}
+		*out = (temporal_php_poller_behavior_options_t) {
+			.type = TPHP_POLLER_SIMPLE_MAXIMUM,
+			.simple_maximum = (uint32_t) maximum,
+		};
+		return true;
+	}
+
+	if (zend_string_equals_literal(Z_STR_P(type), "autoscaling")) {
+		uint64_t minimum = 0;
+		uint64_t maximum = 0;
+		uint64_t initial = 0;
+		if (!temporal_worker_nested_uint_option(
+				behavior, key, "minimum", 1, (zend_long) UINT32_MAX, &minimum)
+			|| !temporal_worker_nested_uint_option(
+				behavior, key, "maximum", 1, (zend_long) UINT32_MAX, &maximum)
+			|| !temporal_worker_nested_uint_option(
+				behavior, key, "initial", 1, (zend_long) UINT32_MAX, &initial)) {
+			return false;
+		}
+		if (maximum < minimum) {
+			zend_value_error(
+				"Worker option '%s.maximum' must be greater than or equal to minimum", key);
+			return false;
+		}
+		if (initial < minimum || initial > maximum) {
+			zend_value_error(
+				"Worker option '%s.initial' must be between minimum and maximum", key);
+			return false;
+		}
+		*out = (temporal_php_poller_behavior_options_t) {
+			.type = TPHP_POLLER_AUTOSCALING,
+			.minimum = (uint32_t) minimum,
+			.maximum = (uint32_t) maximum,
+			.initial = (uint32_t) initial,
+		};
+		return true;
+	}
+
+	zend_value_error(
+		"Worker option '%s.type' must be 'simpleMaximum' or 'autoscaling'", key);
+	return false;
+}
+
 static bool temporal_worker_options_parse(zend_long max_activities, HashTable *options,
                                           temporal_php_worker_options_t *opts)
 {
@@ -900,6 +1096,22 @@ static bool temporal_worker_options_parse(zend_long max_activities, HashTable *o
 		.workflow_slots = 100,
 		.local_activity_slots = 100,
 		.nexus_slots = 100,
+		.activity_slot_supplier = {
+			.type = TPHP_SLOT_SUPPLIER_FIXED,
+			.fixed_slots = (uint32_t) max_activities,
+		},
+		.workflow_slot_supplier = {
+			.type = TPHP_SLOT_SUPPLIER_FIXED,
+			.fixed_slots = 100,
+		},
+		.local_activity_slot_supplier = {
+			.type = TPHP_SLOT_SUPPLIER_FIXED,
+			.fixed_slots = 100,
+		},
+		.nexus_slot_supplier = {
+			.type = TPHP_SLOT_SUPPLIER_FIXED,
+			.fixed_slots = 100,
+		},
 		.max_cached_workflows = 1000,
 		.sticky_schedule_to_start_ms = 10000,
 		.graceful_shutdown_ms = 0,
@@ -909,6 +1121,18 @@ static bool temporal_worker_options_parse(zend_long max_activities, HashTable *o
 		.activity_pollers = 5,
 		.workflow_pollers = 2,
 		.nexus_pollers = 1,
+		.activity_poller_behavior = {
+			.type = TPHP_POLLER_SIMPLE_MAXIMUM,
+			.simple_maximum = 5,
+		},
+		.workflow_poller_behavior = {
+			.type = TPHP_POLLER_SIMPLE_MAXIMUM,
+			.simple_maximum = 2,
+		},
+		.nexus_poller_behavior = {
+			.type = TPHP_POLLER_SIMPLE_MAXIMUM,
+			.simple_maximum = 1,
+		},
 		.max_eager_activity_reservations_per_workflow_task = (uint32_t) max_activities,
 		.identity = "",
 		.build_id = "",
@@ -961,6 +1185,33 @@ static bool temporal_worker_options_parse(zend_long max_activities, HashTable *o
 
 #undef TPHP_WORKER_OPT32
 #undef TPHP_WORKER_OPT64
+
+	/* Legacy flat values are the fixed/simple fallback. Structured values, if
+	 * present, override them for Core versions that support the new behavior. */
+	opts->activity_slot_supplier.fixed_slots = opts->activity_slots;
+	opts->workflow_slot_supplier.fixed_slots = opts->workflow_slots;
+	opts->local_activity_slot_supplier.fixed_slots = opts->local_activity_slots;
+	opts->nexus_slot_supplier.fixed_slots = opts->nexus_slots;
+	opts->activity_poller_behavior.simple_maximum = opts->activity_pollers;
+	opts->workflow_poller_behavior.simple_maximum = opts->workflow_pollers;
+	opts->nexus_poller_behavior.simple_maximum = opts->nexus_pollers;
+
+	if (!temporal_worker_slot_supplier_option(
+			options, "activitySlotSupplier", &opts->activity_slot_supplier)
+		|| !temporal_worker_slot_supplier_option(
+			options, "workflowSlotSupplier", &opts->workflow_slot_supplier)
+		|| !temporal_worker_slot_supplier_option(
+			options, "localActivitySlotSupplier", &opts->local_activity_slot_supplier)
+		|| !temporal_worker_slot_supplier_option(
+			options, "nexusSlotSupplier", &opts->nexus_slot_supplier)
+		|| !temporal_worker_poller_behavior_option(
+			options, "activityPollerBehavior", 1, &opts->activity_poller_behavior)
+		|| !temporal_worker_poller_behavior_option(
+			options, "workflowPollerBehavior", 2, &opts->workflow_poller_behavior)
+		|| !temporal_worker_poller_behavior_option(
+			options, "nexusPollerBehavior", 1, &opts->nexus_poller_behavior)) {
+		return false;
+	}
 
 	if (!temporal_worker_float_option(options, "maxActivitiesPerSecond",
 			&opts->max_activities_per_second)

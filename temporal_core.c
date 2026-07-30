@@ -353,10 +353,51 @@ void temporal_php_cancel_token_free(void *token)
 /* --- Worker ------------------------------------------------------------ */
 
 typedef struct {
-	TemporalCorePollerBehaviorSimpleMaximum activity;
-	TemporalCorePollerBehaviorSimpleMaximum workflow;
-	TemporalCorePollerBehaviorSimpleMaximum nexus;
+	TemporalCorePollerBehaviorSimpleMaximum activity_simple;
+	TemporalCorePollerBehaviorSimpleMaximum workflow_simple;
+	TemporalCorePollerBehaviorSimpleMaximum nexus_simple;
+	TemporalCorePollerBehaviorAutoscaling activity_autoscaling;
+	TemporalCorePollerBehaviorAutoscaling workflow_autoscaling;
+	TemporalCorePollerBehaviorAutoscaling nexus_autoscaling;
 } temporal_php_worker_option_storage_t;
+
+static void temporal_php_slot_supplier_init(
+	TemporalCoreSlotSupplier *supplier,
+	const temporal_php_slot_supplier_options_t *options)
+{
+	if (options->type == TPHP_SLOT_SUPPLIER_RESOURCE_BASED) {
+		supplier->tag = TemporalCoreSlotSupplier_ResourceBased;
+		supplier->resource_based.minimum_slots = options->minimum_slots;
+		supplier->resource_based.maximum_slots = options->maximum_slots;
+		supplier->resource_based.ramp_throttle_ms = options->ramp_throttle_ms;
+		supplier->resource_based.tuner_options.target_memory_usage =
+			options->target_memory_usage;
+		supplier->resource_based.tuner_options.target_cpu_usage =
+			options->target_cpu_usage;
+		return;
+	}
+
+	supplier->tag = TemporalCoreSlotSupplier_FixedSize;
+	supplier->fixed_size.num_slots = options->fixed_slots;
+}
+
+static void temporal_php_poller_behavior_init(
+	TemporalCorePollerBehavior *behavior,
+	TemporalCorePollerBehaviorSimpleMaximum *simple,
+	TemporalCorePollerBehaviorAutoscaling *autoscaling,
+	const temporal_php_poller_behavior_options_t *options)
+{
+	if (options->type == TPHP_POLLER_AUTOSCALING) {
+		autoscaling->minimum = options->minimum;
+		autoscaling->maximum = options->maximum;
+		autoscaling->initial = options->initial;
+		behavior->autoscaling = autoscaling;
+		return;
+	}
+
+	simple->simple_maximum = options->simple_maximum;
+	behavior->simple_maximum = simple;
+}
 
 static void temporal_php_worker_options_init(TemporalCoreWorkerOptions *opt,
                                       temporal_php_worker_option_storage_t *storage,
@@ -394,15 +435,15 @@ static void temporal_php_worker_options_init(TemporalCoreWorkerOptions *opt,
 	}
 	opt->identity_override = temporal_php_ref(options->identity);
 
-	/* Fixed-size slot suppliers. All four must be valid. */
-	opt->tuner.activity_slot_supplier.tag = TemporalCoreSlotSupplier_FixedSize;
-	opt->tuner.activity_slot_supplier.fixed_size.num_slots = options->activity_slots;
-	opt->tuner.workflow_slot_supplier.tag = TemporalCoreSlotSupplier_FixedSize;
-	opt->tuner.workflow_slot_supplier.fixed_size.num_slots = options->workflow_slots;
-	opt->tuner.local_activity_slot_supplier.tag = TemporalCoreSlotSupplier_FixedSize;
-	opt->tuner.local_activity_slot_supplier.fixed_size.num_slots = options->local_activity_slots;
-	opt->tuner.nexus_task_slot_supplier.tag = TemporalCoreSlotSupplier_FixedSize;
-	opt->tuner.nexus_task_slot_supplier.fixed_size.num_slots = options->nexus_slots;
+	/* Fixed-size and resource-based suppliers map directly onto Core's tuner. */
+	temporal_php_slot_supplier_init(
+		&opt->tuner.activity_slot_supplier, &options->activity_slot_supplier);
+	temporal_php_slot_supplier_init(
+		&opt->tuner.workflow_slot_supplier, &options->workflow_slot_supplier);
+	temporal_php_slot_supplier_init(
+		&opt->tuner.local_activity_slot_supplier, &options->local_activity_slot_supplier);
+	temporal_php_slot_supplier_init(
+		&opt->tuner.nexus_task_slot_supplier, &options->nexus_slot_supplier);
 
 	/* Handle workflow, activity and local-activity tasks (a Temporal worker does
 	 * all three). Local activities run in-process and surface on the same activity
@@ -433,12 +474,21 @@ static void temporal_php_worker_options_init(TemporalCoreWorkerOptions *opt,
 	opt->nonsticky_to_sticky_poll_ratio = 0.2f;
 
 	/* Core consumes these pointers synchronously during worker construction. */
-	storage->activity.simple_maximum = options->activity_pollers;
-	storage->workflow.simple_maximum = options->workflow_pollers;
-	storage->nexus.simple_maximum = options->nexus_pollers;
-	opt->activity_task_poller_behavior.simple_maximum = &storage->activity;
-	opt->workflow_task_poller_behavior.simple_maximum = &storage->workflow;
-	opt->nexus_task_poller_behavior.simple_maximum = &storage->nexus;
+	temporal_php_poller_behavior_init(
+		&opt->activity_task_poller_behavior,
+		&storage->activity_simple,
+		&storage->activity_autoscaling,
+		&options->activity_poller_behavior);
+	temporal_php_poller_behavior_init(
+		&opt->workflow_task_poller_behavior,
+		&storage->workflow_simple,
+		&storage->workflow_autoscaling,
+		&options->workflow_poller_behavior);
+	temporal_php_poller_behavior_init(
+		&opt->nexus_task_poller_behavior,
+		&storage->nexus_simple,
+		&storage->nexus_autoscaling,
+		&options->nexus_poller_behavior);
 }
 
 void *temporal_php_worker_new(void *connection, const char *ns, const char *task_queue,

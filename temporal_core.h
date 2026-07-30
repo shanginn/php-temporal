@@ -24,6 +24,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 /* --- Runtime (one Tokio runtime per process) --------------------------- */
 
@@ -106,13 +107,46 @@ void temporal_php_response_free(void *response_owner);
 
 /* --- Worker ------------------------------------------------------------ */
 
-/* Worker tuning. Every field must be filled (the PHP layer applies defaults);
- * slot counts and poller maximums are fixed-size/simple-maximum strategies. */
+enum {
+	TPHP_SLOT_SUPPLIER_FIXED = 0,
+	TPHP_SLOT_SUPPLIER_RESOURCE_BASED = 1,
+};
+
+typedef struct {
+	uint8_t type;
+	uint32_t fixed_slots;
+	uint32_t minimum_slots;
+	uint32_t maximum_slots;
+	uint64_t ramp_throttle_ms;
+	double target_memory_usage;
+	double target_cpu_usage;
+} temporal_php_slot_supplier_options_t;
+
+enum {
+	TPHP_POLLER_SIMPLE_MAXIMUM = 0,
+	TPHP_POLLER_AUTOSCALING = 1,
+};
+
+typedef struct {
+	uint8_t type;
+	uint32_t simple_maximum;
+	uint32_t minimum;
+	uint32_t maximum;
+	uint32_t initial;
+} temporal_php_poller_behavior_options_t;
+
+/* Worker tuning. Every field must be filled (the PHP layer applies defaults).
+ * The flat slot/poller values remain fixed/simple compatibility fallbacks;
+ * their structured counterparts carry the selected Core strategies. */
 typedef struct {
 	uint32_t activity_slots;
 	uint32_t workflow_slots;
 	uint32_t local_activity_slots;
 	uint32_t nexus_slots;
+	temporal_php_slot_supplier_options_t activity_slot_supplier;
+	temporal_php_slot_supplier_options_t workflow_slot_supplier;
+	temporal_php_slot_supplier_options_t local_activity_slot_supplier;
+	temporal_php_slot_supplier_options_t nexus_slot_supplier;
 	uint32_t max_cached_workflows;
 	uint64_t sticky_schedule_to_start_ms;
 	uint64_t graceful_shutdown_ms;
@@ -122,6 +156,9 @@ typedef struct {
 	uint32_t activity_pollers;
 	uint32_t workflow_pollers;
 	uint32_t nexus_pollers;
+	temporal_php_poller_behavior_options_t activity_poller_behavior;
+	temporal_php_poller_behavior_options_t workflow_poller_behavior;
+	temporal_php_poller_behavior_options_t nexus_poller_behavior;
 	uint32_t max_eager_activity_reservations_per_workflow_task;
 	const char *identity;
 	const char *build_id;

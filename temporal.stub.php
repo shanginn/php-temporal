@@ -83,6 +83,23 @@ final class Worker
      *   initiateShutdown() before the core cancels them;
      * - activityPollers (5), workflowPollers (2), nexusPollers (1) — poller
      *   maximums;
+     * - activitySlotSupplier, workflowSlotSupplier,
+     *   localActivitySlotSupplier, nexusSlotSupplier — structured Core slot
+     *   suppliers. Each is either
+     *   `['type' => 'fixed', 'slots' => int]` or
+     *   `['type' => 'resourceBased', 'minimumSlots' => int,
+     *   'maximumSlots' => int, 'rampThrottleMs' => int,
+     *   'targetMemoryUsage' => float, 'targetCpuUsage' => float]`;
+     * - activityPollerBehavior, workflowPollerBehavior,
+     *   nexusPollerBehavior — either
+     *   `['type' => 'simpleMaximum', 'maximum' => int]` or
+     *   `['type' => 'autoscaling', 'minimum' => int, 'maximum' => int,
+     *   'initial' => int]`.
+     *
+     * Structured values override their flat equivalents. The flat values are
+     * retained as fixed/simple fallback settings so a package can safely
+     * degrade when loaded with an older native bridge.
+     *
      * - identity, activity rate limits, heartbeat throttling, eager-activity
      *   reservations, workflow polling, Nexus polling (`enableNexus`, false by
      *   default), and Temporal worker
