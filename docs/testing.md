@@ -8,7 +8,8 @@ php run-tests.php -q -p "$(command -v php)" \
 ```
 
 These cover extension loading, the class/enum/exception surface, the option
-value objects, and the connect-refused path of the async bridge.
+value objects, Nexus option validation and disabled polling, and the
+connect-refused path of the async bridge.
 
 ## Live tests (need a Temporal frontend)
 
@@ -30,6 +31,11 @@ php run-tests.php -q -p "$(command -v php)" \
 
 Override the target with `TEMPORAL_ADDRESS` / `TEMPORAL_NAMESPACE` env vars.
 Tear the server down with `docker rm -f temporal-dev`.
+
+The Nexus lifecycle test enables Nexus polling, accepts a valid cancellation
+acknowledgement, rejects malformed completion protobuf, drains Workflow,
+Activity, and Nexus polls during shutdown, and verifies finalized-worker
+guards. Use Temporal Server 1.31 or newer for the SDK's end-to-end Nexus suite.
 
 ## AddressSanitizer
 

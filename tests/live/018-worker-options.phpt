@@ -23,6 +23,7 @@ await(spawn(function () {
     $worker = new Worker($conn, 'opts-' . bin2hex(random_bytes(3)), temporal_test_namespace(), 8, [
         'workflowSlots' => 16,
         'localActivitySlots' => 4,
+        'nexusSlots' => 8,
         'maxCachedWorkflows' => 50,
         'stickyScheduleToStartTimeoutMs' => 5000,
         'gracefulShutdownMs' => 1000,
@@ -31,13 +32,16 @@ await(spawn(function () {
         'maxTaskQueueActivitiesPerSecond' => 3.5,
         'activityPollers' => 2,
         'workflowPollers' => 2,
+        'nexusPollers' => 1,
         'maxEagerActivityReservationsPerWorkflowTask' => 4,
+        'enableNexus' => true,
         'identity' => 'php-test-worker',
         'buildId' => 'test-build',
     ]);
     $worker->initiateShutdown();
     $worker->pollWorkflowActivation();
     $worker->pollActivityTask();
+    $worker->pollNexusTask();
     $worker->finalizeShutdown();
     var_dump('lifecycle ok');
 

@@ -84,7 +84,8 @@ final class Worker
      * - activityPollers (5), workflowPollers (2), nexusPollers (1) — poller
      *   maximums;
      * - identity, activity rate limits, heartbeat throttling, eager-activity
-     *   reservations, workflow polling, and Temporal worker
+     *   reservations, workflow polling, Nexus polling (`enableNexus`, false by
+     *   default), and Temporal worker
      *   versioning/deployment fields.
      */
     public function __construct(Connection $connection, string $taskQueue, string $namespace = 'default', int $maxConcurrentActivities = 100, array $options = []) {}
@@ -138,6 +139,16 @@ final class Worker
 
     /** Report a workflow activation completion (serialized coresdk completion). */
     public function completeWorkflowActivation(string $completion): void {}
+
+    /**
+     * Poll for the next Nexus task. Nexus polling must be enabled with the
+     * `enableNexus` worker option. Parks the coroutine until a task is ready;
+     * returns the serialized coresdk NexusTask, or null after shutdown.
+     */
+    public function pollNexusTask(): ?string {}
+
+    /** Report a Nexus task completion (serialized coresdk completion). */
+    public function completeNexusTask(string $completion): void {}
 
     /** Begin graceful shutdown; pending and subsequent polls return null. */
     public function initiateShutdown(): void {}

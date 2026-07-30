@@ -48,8 +48,8 @@ Officialness, component by component:
 
 **Split (resolved, see §9.6):** the C extension is a *thin core* — runtime,
 `Core\Connection` (`connect` + async `rpcCall(service, method, bytes): bytes`)
-and `Core\Worker` (poll/complete for activity tasks and workflow activations,
-heartbeat recording, shutdown lifecycle). Everything user-facing — the high-level
+and `Core\Worker` (poll/complete for activity tasks, workflow activations, and
+Nexus tasks; heartbeat recording; shutdown lifecycle). Everything user-facing — the high-level
 `Client`/`WorkflowHandle`,
 the typed options/enums/exceptions, the generated `Temporal\Api\*` protobuf
 messages and the pluggable data converter — lives in a **PHP composer package**.
@@ -81,7 +81,9 @@ void temporal_core_client_free(TemporalCoreConnection*);
 // worker poll / complete are likewise async + callback:
 void temporal_core_worker_poll_workflow_activation(TemporalCoreWorker*, void*, TemporalCoreWorkerPollCallback);
 void temporal_core_worker_complete_workflow_activation(TemporalCoreWorker*, TemporalCoreByteArrayRef, void*, TemporalCoreWorkerCallback);
-// + activity / nexus variants, initiate_shutdown, finalize_shutdown, cancellation_token_*
+void temporal_core_worker_poll_nexus_task(TemporalCoreWorker*, void*, TemporalCoreWorkerPollCallback);
+void temporal_core_worker_complete_nexus_task(TemporalCoreWorker*, TemporalCoreByteArrayRef, void*, TemporalCoreWorkerCallback);
+// + activity variants, initiate_shutdown, finalize_shutdown, cancellation_token_*
 ```
 
 Each async function returns immediately. The callback fires later **on a Tokio

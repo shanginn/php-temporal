@@ -917,6 +917,7 @@ static bool temporal_worker_options_parse(zend_long max_activities, HashTable *o
 		.versioning_strategy = 0,
 		.deployment_use_versioning = false,
 		.disable_workflows = false,
+		.enable_nexus = false,
 	};
 
 	if (options == NULL) {
@@ -969,6 +970,8 @@ static bool temporal_worker_options_parse(zend_long max_activities, HashTable *o
 			&opts->deployment_use_versioning)
 		|| !temporal_worker_bool_option(options, "disableWorkflows",
 			&opts->disable_workflows)
+		|| !temporal_worker_bool_option(options, "enableNexus",
+			&opts->enable_nexus)
 		|| !temporal_worker_string_option(options, "identity", &opts->identity)
 		|| !temporal_worker_string_option(options, "buildId", &opts->build_id)
 		|| !temporal_worker_string_option(options, "deploymentName", &opts->deployment_name)) {
@@ -1207,6 +1210,36 @@ PHP_METHOD(TrueAsync_Temporal_Core_Worker, pollWorkflowActivation)
 	temporal_php_response_free(out.r.owner);
 }
 
+PHP_METHOD(TrueAsync_Temporal_Core_Worker, pollNexusTask)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+
+	temporal_worker_obj *self = temporal_worker_from_obj(Z_OBJ_P(ZEND_THIS));
+
+	TEMPORAL_REQUIRE_LIVE_WORKER(self, "pollNexusTask");
+	TEMPORAL_ENSURE_COROUTINE();
+
+	temporal_outcome_t out;
+	temporal_run_worker_poll((temporal_php_handle_t *) self->worker, temporal_php_worker_poll_nexus, &out);
+
+	if (out.cancelled) {
+		RETURN_THROWS();
+	}
+
+	if (out.r.fail != NULL) {
+		zend_throw_exception_ex(temporal_ce_service_exception, 0, "%s", out.r.fail);
+		free(out.r.fail);
+		RETURN_THROWS();
+	}
+
+	if (out.r.data == NULL) {
+		RETURN_NULL();   /* shutdown */
+	}
+
+	RETVAL_STRINGL((const char *) out.r.data, out.r.data_len);
+	temporal_php_response_free(out.r.owner);
+}
+
 PHP_METHOD(TrueAsync_Temporal_Core_Worker, completeActivityTask)
 {
 	zend_string *completion;
@@ -1250,6 +1283,34 @@ PHP_METHOD(TrueAsync_Temporal_Core_Worker, completeWorkflowActivation)
 
 	temporal_outcome_t out;
 	temporal_run_worker_complete((temporal_php_handle_t *) self->worker, temporal_php_worker_complete_workflow,
+	                             (const uint8_t *) ZSTR_VAL(completion), ZSTR_LEN(completion), &out);
+
+	if (out.cancelled) {
+		RETURN_THROWS();
+	}
+
+	if (out.r.fail != NULL) {
+		zend_throw_exception_ex(temporal_ce_service_exception, 0, "%s", out.r.fail);
+		free(out.r.fail);
+		RETURN_THROWS();
+	}
+}
+
+PHP_METHOD(TrueAsync_Temporal_Core_Worker, completeNexusTask)
+{
+	zend_string *completion;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STR(completion)
+	ZEND_PARSE_PARAMETERS_END();
+
+	temporal_worker_obj *self = temporal_worker_from_obj(Z_OBJ_P(ZEND_THIS));
+
+	TEMPORAL_REQUIRE_LIVE_WORKER(self, "completeNexusTask");
+	TEMPORAL_ENSURE_COROUTINE();
+
+	temporal_outcome_t out;
+	temporal_run_worker_complete((temporal_php_handle_t *) self->worker, temporal_php_worker_complete_nexus,
 	                             (const uint8_t *) ZSTR_VAL(completion), ZSTR_LEN(completion), &out);
 
 	if (out.cancelled) {

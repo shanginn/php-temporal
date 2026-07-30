@@ -55,10 +55,10 @@ Just the transport seam:
 - `TrueAsync\Temporal\Core\Connection` — `connect` plus an async
   `rpcCall(service, method, requestBytes): responseBytes`.
 - `TrueAsync\Temporal\Core\Worker` — the worker transport: poll/complete for
-  activity tasks and workflow activations, activity heartbeat recording, and
-  the shutdown lifecycle. It also exposes an offline replay worker that accepts
-  serialized `Temporal\Api\History\V1\History` messages, so the reused SDK can
-  verify workflow histories without a server.
+  activity tasks, workflow activations, and Nexus tasks; activity heartbeat
+  recording; and the shutdown lifecycle. It also exposes an offline replay
+  worker that accepts serialized `Temporal\Api\History\V1\History` messages, so
+  the reused SDK can verify workflow histories without a server.
 - `TrueAsync\Temporal\{TemporalException, ConnectionException, ServiceException}`.
 
 Everything user-facing (workflow client, options, data converter, the generated
@@ -126,6 +126,32 @@ $core = new CoreWorker(new Connection('127.0.0.1:7233'), 'orders');  // 'orders'
 `run()` blocks until the core shuts down; call `$worker->shutdown()` from a signal
 handler or another coroutine to stop the loops, after which `run()` finalizes and
 returns.
+
+### Serve and call Nexus operations
+
+The high-level SDK registers Nexus services on an ordinary native Worker. It
+enables the Core Nexus task type only when that Worker has at least one service:
+
+```php
+use Temporal\Client\GRPC\ServiceClient;
+use Temporal\Client\WorkflowClient;
+use Temporal\WorkerFactory;
+
+$client = WorkflowClient::create(ServiceClient::create('127.0.0.1:7233'));
+$factory = WorkerFactory::create(client: $client);
+$factory->newWorker('nexus-handler')
+    ->registerWorkflowTypes(BackingWorkflow::class)
+    ->registerNexusServiceImplementation(new PaymentsService());
+$factory->run();
+```
+
+The extension exposes the underlying `pollNexusTask()` and
+`completeNexusTask()` methods for the SDK transport loop. Applications should
+use `WorkerFactory` and the public `Temporal\Nexus` API rather than encode Core
+protobuf messages directly. See the
+[SDK Nexus guide](https://github.com/shanginn/sdk-php/blob/true-async/docs/nexus.md)
+for service contracts, Endpoints, callers, cancellation, failures, and
+timeouts.
 
 ### Replay a workflow history
 
@@ -203,6 +229,9 @@ a live server today:
 - **Transport** (`Core\Connection`, `Core\Worker`) — reviewed, ASAN-clean,
   covered by the test suite and CI.
 - **Activity worker** — run, heartbeat, cooperative cancellation.
+- **Nexus worker and caller** — synchronous and Workflow-backed operations,
+  handler-method cancellation, typed failures, headers, links, all operation
+  timeouts, and all cancellation modes through the native Core protocol.
 - **Workflow worker** — the lifecycle through the reused SDK engine:
   start/complete, timers, activities (regular and local), signals, queries,
   cancellation (of the workflow, its timers, activities and child workflows),

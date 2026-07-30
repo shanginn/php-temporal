@@ -1,5 +1,5 @@
 /* This is a generated file, edit temporal.stub.php instead.
- * Stub hash: 958dd7c70a230b0589c8c4d90969eb553afa3546 */
+ * Stub hash: b9ff89bce5c779664c341880817a6b25f51b439c */
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_TrueAsync_Temporal_Core_Connection___construct, 0, 0, 1)
 	ZEND_ARG_TYPE_INFO(0, address, IS_STRING, 0)
@@ -57,6 +57,10 @@ ZEND_END_ARG_INFO()
 
 #define arginfo_class_TrueAsync_Temporal_Core_Worker_completeWorkflowActivation arginfo_class_TrueAsync_Temporal_Core_Worker_completeActivityTask
 
+#define arginfo_class_TrueAsync_Temporal_Core_Worker_pollNexusTask arginfo_class_TrueAsync_Temporal_Core_Worker_pollActivityTask
+
+#define arginfo_class_TrueAsync_Temporal_Core_Worker_completeNexusTask arginfo_class_TrueAsync_Temporal_Core_Worker_completeActivityTask
+
 #define arginfo_class_TrueAsync_Temporal_Core_Worker_initiateShutdown arginfo_class_TrueAsync_Temporal_Core_Worker_closeReplayHistory
 
 #define arginfo_class_TrueAsync_Temporal_Core_Worker_finalizeShutdown arginfo_class_TrueAsync_Temporal_Core_Worker_closeReplayHistory
@@ -72,6 +76,8 @@ ZEND_METHOD(TrueAsync_Temporal_Core_Worker, completeActivityTask);
 ZEND_METHOD(TrueAsync_Temporal_Core_Worker, recordActivityHeartbeat);
 ZEND_METHOD(TrueAsync_Temporal_Core_Worker, pollWorkflowActivation);
 ZEND_METHOD(TrueAsync_Temporal_Core_Worker, completeWorkflowActivation);
+ZEND_METHOD(TrueAsync_Temporal_Core_Worker, pollNexusTask);
+ZEND_METHOD(TrueAsync_Temporal_Core_Worker, completeNexusTask);
 ZEND_METHOD(TrueAsync_Temporal_Core_Worker, initiateShutdown);
 ZEND_METHOD(TrueAsync_Temporal_Core_Worker, finalizeShutdown);
 
@@ -91,6 +97,8 @@ static const zend_function_entry class_TrueAsync_Temporal_Core_Worker_methods[] 
 	ZEND_ME(TrueAsync_Temporal_Core_Worker, recordActivityHeartbeat, arginfo_class_TrueAsync_Temporal_Core_Worker_recordActivityHeartbeat, ZEND_ACC_PUBLIC)
 	ZEND_ME(TrueAsync_Temporal_Core_Worker, pollWorkflowActivation, arginfo_class_TrueAsync_Temporal_Core_Worker_pollWorkflowActivation, ZEND_ACC_PUBLIC)
 	ZEND_ME(TrueAsync_Temporal_Core_Worker, completeWorkflowActivation, arginfo_class_TrueAsync_Temporal_Core_Worker_completeWorkflowActivation, ZEND_ACC_PUBLIC)
+	ZEND_ME(TrueAsync_Temporal_Core_Worker, pollNexusTask, arginfo_class_TrueAsync_Temporal_Core_Worker_pollNexusTask, ZEND_ACC_PUBLIC)
+	ZEND_ME(TrueAsync_Temporal_Core_Worker, completeNexusTask, arginfo_class_TrueAsync_Temporal_Core_Worker_completeNexusTask, ZEND_ACC_PUBLIC)
 	ZEND_ME(TrueAsync_Temporal_Core_Worker, initiateShutdown, arginfo_class_TrueAsync_Temporal_Core_Worker_initiateShutdown, ZEND_ACC_PUBLIC)
 	ZEND_ME(TrueAsync_Temporal_Core_Worker, finalizeShutdown, arginfo_class_TrueAsync_Temporal_Core_Worker_finalizeShutdown, ZEND_ACC_PUBLIC)
 	ZEND_FE_END

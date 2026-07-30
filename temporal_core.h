@@ -130,6 +130,7 @@ typedef struct {
 	uint8_t versioning_strategy;
 	bool deployment_use_versioning;
 	bool disable_workflows;
+	bool enable_nexus;
 } temporal_php_worker_options_t;
 
 /* Create a worker on a task queue handling both workflow and activity tasks.
@@ -162,6 +163,7 @@ typedef void (*temporal_php_worker_poll_cb)(void *user_data,
                                     char *fail, size_t fail_len);
 void temporal_php_worker_poll_activity(void *worker, void *user_data, temporal_php_worker_poll_cb done);
 void temporal_php_worker_poll_workflow(void *worker, void *user_data, temporal_php_worker_poll_cb done);
+void temporal_php_worker_poll_nexus(void *worker, void *user_data, temporal_php_worker_poll_cb done);
 
 /* Completion of a void worker op (complete activity/workflow, finalize shutdown).
  * `fail` (heap) is NULL on success. Must be Zend/TSRM-free. */
@@ -169,6 +171,8 @@ typedef void (*temporal_php_worker_done_cb)(void *user_data, char *fail, size_t 
 void temporal_php_worker_complete_activity(void *worker, const uint8_t *completion, size_t len,
                                    void *user_data, temporal_php_worker_done_cb done);
 void temporal_php_worker_complete_workflow(void *worker, const uint8_t *completion, size_t len,
+                                   void *user_data, temporal_php_worker_done_cb done);
+void temporal_php_worker_complete_nexus(void *worker, const uint8_t *completion, size_t len,
                                    void *user_data, temporal_php_worker_done_cb done);
 void temporal_php_worker_finalize_shutdown(void *worker, void *user_data, temporal_php_worker_done_cb done);
 

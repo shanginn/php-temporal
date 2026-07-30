@@ -413,7 +413,7 @@ static void temporal_php_worker_options_init(TemporalCoreWorkerOptions *opt,
 	opt->task_types.enable_workflows = replay || !options->disable_workflows;
 	opt->task_types.enable_remote_activities = !replay;
 	opt->task_types.enable_local_activities = !replay && !options->disable_workflows;
-	opt->task_types.enable_nexus = false;
+	opt->task_types.enable_nexus = !replay && options->enable_nexus;
 
 	/* Sticky execution: keep workflow runs cached between tasks so a fired timer
 	 * or resolved activity resumes the live instance instead of replaying from
@@ -644,6 +644,19 @@ void temporal_php_worker_poll_workflow(void *worker, void *user_data, temporal_p
 	temporal_core_worker_poll_workflow_activation((TemporalCoreWorker *) worker, c, temporal_php_on_worker_poll);
 }
 
+void temporal_php_worker_poll_nexus(void *worker, void *user_data, temporal_php_worker_poll_cb done)
+{
+	temporal_php_poll_ctx *c = (temporal_php_poll_ctx *) calloc(1, sizeof(*c));
+	if (c == NULL) {
+		done(user_data, NULL, 0, NULL, strdup("temporal: out of memory"), 0);
+		return;
+	}
+	c->user_data = user_data;
+	c->done = done;
+
+	temporal_core_worker_poll_nexus_task((TemporalCoreWorker *) worker, c, temporal_php_on_worker_poll);
+}
+
 void temporal_php_worker_complete_workflow(void *worker, const uint8_t *completion, size_t len,
                                    void *user_data, temporal_php_worker_done_cb done)
 {
@@ -668,6 +681,32 @@ void temporal_php_worker_complete_workflow(void *worker, const uint8_t *completi
 
 	temporal_core_worker_complete_workflow_activation((TemporalCoreWorker *) worker, ref, c,
 	                                                  temporal_php_on_worker_done);
+}
+
+void temporal_php_worker_complete_nexus(void *worker, const uint8_t *completion, size_t len,
+                                   void *user_data, temporal_php_worker_done_cb done)
+{
+	temporal_php_worker_done_ctx *c = (temporal_php_worker_done_ctx *) calloc(1, sizeof(*c));
+	if (c != NULL) {
+		c->completion = (uint8_t *) malloc(len > 0 ? len : 1);
+	}
+	if (c == NULL || c->completion == NULL) {
+		free(c);
+		done(user_data, strdup("temporal: out of memory"), 0);
+		return;
+	}
+	c->user_data = user_data;
+	c->done = done;
+	if (len > 0 && completion != NULL) {
+		memcpy(c->completion, completion, len);
+	}
+
+	TemporalCoreByteArrayRef ref;
+	ref.data = c->completion;
+	ref.size = len;
+
+	temporal_core_worker_complete_nexus_task((TemporalCoreWorker *) worker, ref, c,
+	                                         temporal_php_on_worker_done);
 }
 
 void temporal_php_worker_finalize_shutdown(void *worker, void *user_data, temporal_php_worker_done_cb done)
