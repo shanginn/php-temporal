@@ -94,7 +94,7 @@ jobs:
       - name: Start the Temporal dev server
         run: |
           docker run -d --name temporal-dev -p 7233:7233 \
-            temporalio/temporal server start-dev --ip 0.0.0.0 --log-level error
+            temporalio/temporal:1.8.1 server start-dev --ip 0.0.0.0 --log-level error
           for i in $(seq 1 60); do
             if (exec 3<>/dev/tcp/127.0.0.1/7233) 2>/dev/null; then exit 0; fi
             sleep 1
@@ -102,6 +102,12 @@ jobs:
           echo "Temporal dev server did not come up" >&2
           docker logs temporal-dev >&2 || true
           exit 1
+
+      - name: Expose the matching Temporal CLI
+        run: |
+          docker cp temporal-dev:/usr/local/bin/temporal "$RUNNER_TEMP/temporal"
+          chmod +x "$RUNNER_TEMP/temporal"
+          echo "TEMPORAL_CLI_BINARY=$RUNNER_TEMP/temporal" >> "$GITHUB_ENV"
 
       # ---- Extension test suite (offline + live) ----
 
