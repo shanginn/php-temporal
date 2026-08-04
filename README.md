@@ -17,7 +17,7 @@ A thin native extension that runs the **official Temporal Rust Core**
 exposes it to PHP as an async transport. No gRPC extension, no RoadRunner: the
 core's gRPC runs on its own Tokio threads, and completions are delivered back to
 the TrueAsync reactor through a cross-thread trigger, so every call looks
-synchronous while the coroutine yields underneath.
+synchronous while TrueAsync suspends the caller until the operation completes.
 
 The **high-level client API is the reused official Temporal PHP SDK** (the
 `Temporal\*` namespace), driven through a `ServiceClientInterface` adapter over
@@ -66,8 +66,9 @@ Everything user-facing (workflow client, options, data converter, the generated
 
 ## Usage
 
-Workflow and activity code is the **reused SDK's** — the same attributes and
-generator (`yield`) style as `temporalio/sdk-php`; only the transport differs.
+Workflow and activity code uses the TrueAsync SDK's direct, synchronous-looking
+style: workflow primitives suspend deterministically behind ordinary method
+calls.
 
 ### Define a workflow and an activity
 
@@ -83,14 +84,14 @@ use Temporal\Workflow\WorkflowMethod;
 class OrderWorkflow
 {
     #[WorkflowMethod(name: 'OrderWorkflow')]
-    public function run(string $orderId): \Generator
+    public function run(string $orderId): string
     {
         $activities = Workflow::newActivityStub(
             OrderActivities::class,
             ActivityOptions::new()->withStartToCloseTimeout(10),
         );
 
-        $charged = yield $activities->charge($orderId);   // schedule + await the activity
+        $charged = $activities->charge($orderId);   // schedules and waits for the activity
 
         return "order {$orderId}: {$charged}";
     }
@@ -189,9 +190,9 @@ class SubscriptionWorkflow
     private bool $cancelled = false;
 
     #[WorkflowMethod(name: 'SubscriptionWorkflow')]
-    public function run(): \Generator
+    public function run(): string
     {
-        yield Workflow::await(fn() => $this->cancelled);
+        Workflow::await(fn() => $this->cancelled);
         return 'cancelled';
     }
 

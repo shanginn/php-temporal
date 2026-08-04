@@ -215,25 +215,23 @@ at), complete back through the core. Heartbeating maps to a timer + RPC.
 **deterministic and replayable**: time, randomness and every await must come
 from history, never from the live reactor.
 
-**Chosen model: blocking coroutine, Go/Java style.** Workflow code is ordinary
-"write sync" PHP (no `yield`); it runs on a deterministic dispatcher we own,
-built on TrueAsync's existing **coroutines, channels and suspend** primitives.
-The dispatcher runs exactly one workflow coroutine at a time and only ever
-resumes it from history, so execution is single-threaded and deterministic. This
-is how the Go and Java SDKs work, and it matches TrueAsync's own "write sync, run
-async" identity. The generator/`yield` model of `temporalio/sdk-php` is the
-fallback only if detection proves unreliable.
+**Chosen model: blocking Workflow task, Go/Java style.** Workflow code is
+ordinary "write sync" PHP. It runs in managed PHP Fibers inside the TrueAsync
+Worker runtime. The deterministic dispatcher runs exactly one Workflow Fiber at
+a time and only resumes it from history, so execution is single-threaded and
+deterministic. This is how the Go and Java SDKs behave, and it matches
+TrueAsync's own "write sync, run async" identity.
 
 Determinism rests on three layers, taken from Go:
 
-1. **A user-space deterministic dispatcher** over TrueAsync coroutines and
-   channels; the only way a workflow waits is a `Workflow::*` call that suspends
-   into it (cf. Go's `coroutineState` gated by channels, single coroutine
-   running at a time).
-2. **Blessed primitives** — `Workflow::executeActivity` / `timer` / `awaitSignal`
-   / `now` / `sideEffect` / `go` — replace anything touching time, I/O or random.
+1. **A user-space deterministic dispatcher** over managed PHP Fibers; the only
+   way a Workflow waits is a `Workflow::*` call routed through the SDK `Awaiter`
+   (cf. Go's `coroutineState`, with one Workflow task running at a time).
+2. **Blessed primitives** — `Workflow::executeActivity` / `timer` / `await`
+   / `now` / `sideEffect` / `async` — replace anything touching time, I/O or
+   random.
 3. **Detection, not a hard sandbox** — a runtime guard trips if a workflow
-   coroutine reaches the real reactor (real `Async\*`, sockets, timers), backed
+   Fiber reaches the real reactor (real `Async\*`, sockets, timers), backed
    by replay-mismatch detection; an optional static analyzer can follow later
    (cf. Go's `workflowcheck`).
 
@@ -242,26 +240,23 @@ The core already helps: it hands us "workflow activations" (jobs) and takes back
 bridge. Our job is the language-side dispatcher and the blessed primitives, not
 the state machines.
 
-**Implementation note (as shipped).** Phase 3 landed on the *fallback* path, not
-the bespoke dispatcher above: rather than write a new deterministic dispatcher,
-the worker reuses `temporalio/sdk-php`'s existing generator-based workflow engine
-(the Router/RunningWorkflows command-queue loop) unchanged, driven one activation
-at a time by `WorkflowWorkerFactory::processActivation`. Determinism is enforced
-by layer 3 — a runtime guard (`NonDeterministicWorkflowException`) modelled on the
-**Go SDK dispatcher's deadlock detector**: the activation is applied in a child
-coroutine and raced against a time budget (`DETERMINISM_BUDGET_MS`); correct
-workflow code resolves every wait synchronously from history and finishes far
-within the budget, so a workflow that blocks the worker coroutine on the real
-reactor (a direct `Async\*`, blocking I/O, a non-workflow await) overruns it and
-fails the task instead of committing a non-deterministic result. (An earlier
-version flagged the mere *fact* of a coroutine switch, which was wrong — a benign
-momentary switch, e.g. a fire-and-forget command like `upsertSearchAttributes`,
-is normal; only a *lasting* block is a violation, exactly as in Go.) Reusing the
-proven engine instead of reimplementing the state machines is what made the
-lifecycle (timers, activities, signals, queries, cancellation, child workflows,
-continue-as-new, external signal/cancel, updates, search attributes) land quickly
-and correctly; the blessed-primitive dispatcher remains a possible future
-direction, not the current design.
+**Implementation note.** TrueAsync drives the Worker pollers and applies one
+activation at a time through `WorkflowWorkerFactory::processActivation`. Each
+Workflow scope owns a managed PHP `Fiber` (`DeferredFiber`). A blessed Workflow
+primitive uses the SDK `Awaiter` to suspend that Fiber at a deterministic
+checkpoint, lets the Worker emit the pending commands, and resumes the Fiber
+only from the corresponding history event. Signals, updates, and
+`Workflow::async()` handlers use managed Fibers under the same deterministic
+scheduler.
+
+Layer 3 remains a runtime guard (`NonDeterministicWorkflowException`) modelled on
+the **Go SDK dispatcher's deadlock detector**. Each activation drain is raced
+against a time budget (`DETERMINISM_BUDGET_MS`); a workflow that blocks on the
+real reactor (a direct `Async\*`, blocking I/O, or a non-workflow wait) overruns
+the budget and fails the task instead of committing a non-deterministic result.
+The existing command and lifecycle state machines still cover timers,
+activities, signals, queries, cancellation, child workflows, continue-as-new,
+external signal/cancel, updates and search attributes.
 
 ## 8. Build & dependencies
 
@@ -288,13 +283,10 @@ direction, not the current design.
    the PHP side** (slim C bridge, bytes only); generated classes are **bundled**
    in the repo under `TrueAsync\Temporal\Api\...`; runtime uses the `protobuf` C
    extension (pure-PHP fallback acceptable). Users never see protobuf directly.
-3. ~~Worker workflow model (a) vs (b).~~ **Resolved at design time: (b) blocking
-   coroutine, Go/Java style** — a deterministic dispatcher over TrueAsync
-   coroutines + channels + suspend, blessed `Workflow::*` primitives, and a
-   detect-guard instead of a hard sandbox (section 7). **As shipped, Phase 3 took
-   the generator/`yield` fallback instead** — it reuses `temporalio/sdk-php`'s
-   engine unchanged, keeping only the detect-guard from (b). See the
-   "Implementation note (as shipped)" in section 7.
+3. ~~Worker workflow model (a) vs (b).~~ **Resolved: blocking Workflow tasks,
+   Go/Java style** — a deterministic dispatcher over managed PHP Fibers,
+   blessed `Workflow::*` primitives, and a detect-guard instead of a hard
+   sandbox (section 7).
 4. ~~One process-wide runtime vs configurable.~~ **Resolved: one
    `TemporalCoreRuntime` per process** (Tokio threads), created in MINIT, freed
    in MSHUTDOWN after quiesce; all clients/workers share it. Telemetry / metrics
